@@ -1,7 +1,6 @@
 'use client';
 
 import { useChapters, useNilai } from '@/lib/firestore-data';
-import { ScoreRecord } from '@/lib/types';
 
 export default function NilaiPage() {
   const { chapters, loading } = useChapters();
@@ -16,30 +15,27 @@ export default function NilaiPage() {
   }
 
   // Group scores by chapter
-  const byChapter: Record<string, ScoreRecord[]> = {};
+  const chapterScores: Record<string, { pretest?: number; posttest?: number; tugas?: number; pengayaan?: number }> = {};
   for (const s of scores) {
-    if (!byChapter[s.chapterId]) byChapter[s.chapterId] = [];
-    byChapter[s.chapterId].push(s);
+    if (!chapterScores[s.chapterId]) chapterScores[s.chapterId] = {};
+    chapterScores[s.chapterId][s.type] = s.score;
   }
 
   const chaptersWithScores = chapters.map((c, i) => {
-    const chScores = byChapter[c.id] || [];
-    const pretest = chScores.find(s => s.type === 'pretest')?.score ?? null;
-    const posttest = chScores.find(s => s.type === 'posttest')?.score ?? null;
-    const tugas = chScores.find(s => s.type === 'tugas')?.score ?? null;
-    const pengayaan = chScores.find(s => s.type === 'pengayaan')?.score ?? null;
-    return { chapter: c, idx: i, pretest, posttest, tugas, pengayaan, hasScores: chScores.length > 0 };
+    const cs = chapterScores[c.id] || {};
+    const isDone = cs.posttest !== undefined;
+    return { chapter: c, idx: i, ...cs, isDone };
   });
 
-  const scoredChapters = chaptersWithScores.filter(c => c.posttest !== null);
-  const avgScore = scoredChapters.length > 0
-    ? Math.round(scoredChapters.reduce((sum, c) => sum + (c.posttest || 0), 0) / scoredChapters.length)
+  const posttestValues = chaptersWithScores.filter(c => c.posttest !== undefined).map(c => c.posttest!);
+  const avgScore = posttestValues.length > 0
+    ? Math.round(posttestValues.reduce((a, b) => a + b, 0) / posttestValues.length)
     : null;
 
-  const scoreItems = (label: string, score: number | null, color: string) => (
-    <div className={`text-center p-2 rounded-xl ${score !== null ? color : 'bg-gray-50'}`}>
+  const scoreItem = (label: string, score: number | undefined, color: string) => (
+    <div className={`text-center p-2 rounded-xl ${score !== undefined ? color : 'bg-gray-50'}`}>
       <p className="text-[10px] text-[#8A9E95] font-medium uppercase">{label}</p>
-      <p className="text-lg font-bold text-[#1F3D30]">{score !== null ? score : '—'}</p>
+      <p className="text-lg font-bold text-[#1F3D30]">{score !== undefined ? score : '—'}</p>
     </div>
   );
 
@@ -59,10 +55,11 @@ export default function NilaiPage() {
       </div>
 
       <div className="space-y-3">
-        {chaptersWithScores.map(({ chapter, idx, pretest, posttest, tugas, pengayaan, hasScores }) => {
-          const delta = pretest !== null && posttest !== null ? posttest - pretest : null;
+        {chaptersWithScores.map(({ chapter, idx, pretest, posttest, tugas, pengayaan, isDone }) => {
+          const hasScores = pretest !== undefined || posttest !== undefined || tugas !== undefined;
+          const delta = pretest !== undefined && posttest !== undefined ? posttest - pretest : null;
 
-          if (!hasScores) {
+          if (!isDone && !hasScores) {
             return (
               <div key={chapter.id} className="p-4 rounded-2xl bg-white border border-[#1F3D30]/5 flex items-center gap-4">
                 <span className="text-2xl flex-shrink-0">{chapter.coverEmoji}</span>
@@ -83,17 +80,18 @@ export default function NilaiPage() {
                   <span className="text-xl">{chapter.coverEmoji}</span>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold truncate">Bab {idx + 1}: {chapter.title}</p>
+                    {isDone && <span className="text-[11px] text-emerald-600 font-medium">✓ Selesai</span>}
                   </div>
                 </div>
                 <div className="grid grid-cols-4 gap-2">
-                  {scoreItems('Pre-Test', pretest, 'bg-amber-50')}
-                  {scoreItems('Post-Test', posttest, 'bg-emerald-50')}
-                  {scoreItems('Tugas', tugas, 'bg-blue-50')}
-                  {scoreItems('Pengayaan', pengayaan, 'bg-purple-50')}
+                  {scoreItem('Pre-Test', pretest, 'bg-amber-50')}
+                  {scoreItem('Post-Test', posttest, 'bg-emerald-50')}
+                  {scoreItem('Pengayaan', pengayaan, 'bg-purple-50')}
+                  {scoreItem('Tugas', tugas, 'bg-blue-50')}
                 </div>
                 {delta !== null && (
                   <div className="mt-3 text-center py-2 rounded-xl bg-emerald-50">
-                    <p className="text-xs text-emerald-700">📈 Pre-Test {pretest} → Post-Test {posttest} <span className="font-bold">(+{delta})</span></p>
+                    <p className="text-xs text-emerald-700">📈 Pre-Test {pretest} → Post-Test {posttest} <span className="font-bold">({delta >= 0 ? '+' : ''}{delta})</span></p>
                   </div>
                 )}
               </div>

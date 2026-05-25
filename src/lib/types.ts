@@ -7,31 +7,31 @@ export interface MCQ {
   correctIndex: number;
 }
 
-// ── Answer/submission records ──
+// ── Answer records for task/pengayaan submissions ──
 export interface TaskAnswer {
   userId: string;
   userName: string;
+  answers: Record<string, number>; // questionId → selectedIndex
   score: number;
-  answers: Record<string, number>; // questionId -> selectedIndex
-  submittedAt: string; // ISO
+  submittedAt: string; // ISO timestamp
 }
 
 export interface PengayaanAnswer {
   userId: string;
   userName: string;
   link: string;
-  submittedAt: string; // ISO
+  submittedAt: string;
 }
 
-// ── Chapter task — now MCQ by default ──
+// ── Chapter Task — now supports MCQ ──
 export interface ChapterTask {
   id: string;
   title: string;
   description: string;
   dueDate: string | null;
-  type: 'mcq';                                // tugas = MCQ (sama kayak postTest)
-  questions: MCQ[];                           // the MCQ questions
-  answer: TaskAnswer[];                       // who submitted what
+  type: 'mcq';
+  questions: MCQ[]; // MCQ questions for this task
+  answer: TaskAnswer[]; // student submissions
 }
 
 export interface Chapter {
@@ -47,32 +47,45 @@ export interface Chapter {
   postTestMandatory: MCQ[];
   postTestOptional: {
     instruction: string;
-    answer: PengayaanAnswer[];                // who submitted what
+    answer: PengayaanAnswer[]; // student submissions
   } | null;
   coverEmoji: string;
   coverColor: string;
 }
 
-// ── Progress: boolean-only, no scores ──
+// ── Per-chapter progress — ONLY boolean flags ──
 export interface ChapterProgressDetail {
   pretest: boolean;
   materi: boolean;
   tugas: boolean;
   posttest: boolean;
-  complete: boolean;                          // auto: all four true
+  complete: boolean; // auto-computed
 }
 
 export interface StudentProgressMap {
   [chapterId: string]: ChapterProgressDetail;
 }
 
-// ── Nilai / scores — separate subcollection ──
+// ── Nilai subcollection record ──
 export interface ScoreRecord {
-  id: string;                                 // doc id e.g. "bab-1-pretest"
+  id: string; // doc ID e.g. "bab-1-pretest"
   chapterId: string;
   type: 'pretest' | 'posttest' | 'tugas' | 'pengayaan';
   score: number;
   submittedAt: string;
+}
+
+// ── Legacy compat ──
+export interface ChapterProgress {
+  preTestCompleted: boolean;
+  preTestScore: number | null;
+  materialCompleted: boolean;
+  completedTaskIds: string[];
+  postTestMandatoryCompleted: boolean;
+  postTestMandatoryScore: number | null;
+  postTestOptionalSubmitted: boolean;
+  postTestOptionalLink: string | null;
+  postTestOptionalScore: number | null;
 }
 
 export interface StudentInfo {

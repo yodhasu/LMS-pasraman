@@ -2,12 +2,15 @@
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import ReactMarkdown from 'react-markdown';
-import { useChapters, useStudentProgress, useNilai, markChapterStep, saveScore, submitTaskAnswer, submitPengayaanAnswer } from '@/lib/firestore-data';
+import {
+  useChapters, useStudentProgress, markChapterStep,
+  saveScore, submitTaskAnswer, submitPengayaanLink
+} from '@/lib/firestore-data';
 import { useAuth } from '@/lib/AuthContext';
 import MCQTest from '@/components/MCQTest';
 import YouTubeEmbed from '@/components/YouTubeEmbed';
 import { useState } from 'react';
-import { ChapterProgressDetail } from '@/lib/types';
+import { ChapterProgressDetail, Chapter } from '@/lib/types';
 
 function SectionCard({ step, title, description, done, unlocked, children }: {
   step: number; title: string; description: string; done: boolean; unlocked: boolean; children?: React.ReactNode;
@@ -31,6 +34,10 @@ function SectionCard({ step, title, description, done, unlocked, children }: {
   );
 }
 
+const EMPTY_PROGRESS: ChapterProgressDetail = {
+  pretest: false, materi: false, tugas: false, posttest: false, complete: false,
+};
+
 export default function ChapterClient() {
   const params = useParams();
   const chapterId = params.chapterId as string;
@@ -44,8 +51,8 @@ export default function ChapterClient() {
   const isLocked = !!chapter && !prevCompleted;
 
   const prog: ChapterProgressDetail = chapter
-    ? (progress[chapterId] || { pretest: false, materi: false, tugas: false, posttest: false, complete: false })
-    : { pretest: false, materi: false, tugas: false, posttest: false, complete: false };
+    ? (progress[chapterId] || { ...EMPTY_PROGRESS })
+    : { ...EMPTY_PROGRESS };
 
   if (loading) {
     return (
@@ -95,56 +102,41 @@ export default function ChapterClient() {
     );
   }
 
+  // ── Computed ──
   const hasPreTest = chapter.preTest && chapter.preTest.length > 0;
   const preTestStepDone = !hasPreTest || prog.pretest;
-  const materialStepDone = prog.materi;
-  const tugasStepDone = chapter.tasks.length === 0 || prog.tugas;
-  const postTestStepDone = prog.posttest;
-  const postTestUnlocked = materialStepDone && tugasStepDone;
+  const materialStepDone = prog.materi || false;
+  const tasksAllDone = chapter.tasks.length === 0 || prog.tugas;
+  const postTestStepDone = prog.posttest || false;
+  const postTestUnlocked = materialStepDone && tasksAllDone;
   const optionalUnlocked = postTestStepDone;
+  const displayName = user?.displayName || user?.email?.split('@')[0] || 'Siswa';
 
   // ── Handlers ──
-  const handlePreTestComplete = (score: number) => {
-    if (!user) return;
-    saveScore(user.uid, chapterId, 'pretest', score);
-    markChapterStep(user.uid, chapterId, 'pretest');
+  const handlePreTestComplete = (score: number, _answers: Record<string, number>) => {
+    if (user) {
+      markChapterStep(user.uid, chapterId, 'pretest');
+      saveScore(user.uid, chapterId, 'pretest', score);
+    }
   };
 
   const handleMaterialDone = () => {
     if (user) markChapterStep(user.uid, chapterId, 'materi');
   };
 
-  const handleTugasComplete = (score: number, answers: Record<string, number>) => {
-    if (!user || !chapter) return;
-    const task = chapter.tasks[0]; // assume 1 task per chapter
-    if (!task) return;
-    const answer = {
-      userId: user.uid,
-      userName: user.displayName || user.email?.split('@')[0] || 'Siswa',
-      score,
-      answers,
-      submittedAt: new Date().toISOString(),
-    };
-    saveScore(user.uid, chapterId, 'tugas', score);
-    submitTaskAnswer(chapterId, task.id, answer);
-    markChapterStep(user.uid, chapterId, 'tugas');
+  const handleTugasComplete = (taskIdx: number) => (score: number, answers: Record<string, number>) => {
+    if (user) {
+      markChapterStep(user.uid, chapterId, 'tugas');
+      saveScore(user.uid, chapterId, 'tugas', score);
+      submitTaskAnswer(chapterId, taskIdx, user.uid, displayName, answers, score);
+    }
   };
 
-  const handlePostTestComplete = (score: number) => {
-    if (!user) return;
-    saveScore(user.uid, chapterId, 'posttest', score);
-    markChapterStep(user.uid, chapterId, 'posttest');
-  };
-
-  const handlePengayaanSubmit = (link: string) => {
-    if (!user || !chapter?.postTestOptional) return;
-    const answer = {
-      userId: user.uid,
-      userName: user.displayName || user.email?.split('@')[0] || 'Siswa',
-      link,
-      submittedAt: new Date().toISOString(),
-    };
-    submitPengayaanAnswer(chapterId, answer);
+  const handlePostTestComplete = (score: number, _answers: Record<string, number>) => {
+    if (user) {
+      markChapterStep(user.uid, chapterId, 'posttest');
+      saveScore(user.uid, chapterId, 'posttest', score);
+    }
   };
 
   return (
@@ -189,23 +181,21 @@ export default function ChapterClient() {
         </div>
       </SectionCard>
 
-      {/* Tugas — now MCQ */}
+      {/* Tugas — now MCQ! */}
       {chapter.tasks.length > 0 && (
-        <SectionCard step={hasPreTest ? 3 : 2} title="Tugas" description="Kerjakan soal-soal berikut." done={tugasStepDone} unlocked={materialStepDone}>
-          <div className="ml-11 space-y-3">
-            {chapter.tasks.map((t) => (
-              <div key={t.id} className={`p-4 rounded-xl border ${tugasStepDone ? 'border-emerald-200' : 'border-[#1F3D30]/5 bg-[#FBF8F4]'}`}>
+        <SectionCard step={hasPreTest ? 3 : 2} title="Tugas" description="Kerjakan tugas berikut untuk melanjutkan." done={tasksAllDone} unlocked={materialStepDone}>
+          <div className="ml-11 space-y-4">
+            {chapter.tasks.map((task, tIdx) => (
+              <div key={task.id} className={`p-4 rounded-xl border ${tasksAllDone ? 'border-emerald-200 bg-emerald-50' : 'border-[#1F3D30]/5 bg-[#FBF8F4]'}`}>
                 <div className="mb-3">
-                  <p className="font-semibold text-sm">{t.title}</p>
-                  <p className="text-xs text-[#5C7A6E] mt-0.5">{t.description}</p>
-                  {t.dueDate && <p className="text-xs font-medium text-[#C8A84E] mt-1">Deadline: {new Date(t.dueDate).toLocaleDateString('id-ID')}</p>}
+                  <p className="font-semibold text-sm">{task.title}</p>
+                  <p className="text-xs text-[#5C7A6E] mt-0.5">{task.description}</p>
+                  {task.dueDate && <p className="text-xs font-medium text-[#C8A84E] mt-1">Deadline: {new Date(task.dueDate).toLocaleDateString('id-ID')}</p>}
                 </div>
-                {!tugasStepDone && t.questions && t.questions.length > 0 ? (
-                  <MCQTest questions={t.questions} type="tugas" onComplete={handleTugasComplete} />
-                ) : tugasStepDone ? (
-                  <p className="text-sm text-emerald-700 font-medium">✅ Tugas sudah dikerjakan</p>
+                {!tasksAllDone ? (
+                  <MCQTest questions={task.questions} type="tugas" onComplete={handleTugasComplete(tIdx)} />
                 ) : (
-                  <p className="text-sm text-[#8A9E95]">Belum ada soal tugas.</p>
+                  <p className="text-sm text-emerald-700 font-medium">✅ Tugas sudah dikerjakan</p>
                 )}
               </div>
             ))}
@@ -229,9 +219,11 @@ export default function ChapterClient() {
       {chapter.postTestOptional && (
         <PengayaanSection
           step={hasPreTest ? (chapter.tasks.length > 0 ? 5 : 4) : (chapter.tasks.length > 0 ? 4 : 3)}
-          chapter={chapter}
+          chapterId={chapterId}
+          postTestOptional={chapter.postTestOptional}
           unlocked={optionalUnlocked}
-          onSubmit={handlePengayaanSubmit}
+          user={user}
+          displayName={displayName}
         />
       )}
     </div>
@@ -239,33 +231,46 @@ export default function ChapterClient() {
 }
 
 // ── Pengayaan sub-component ──
-function PengayaanSection({ step, chapter, unlocked, onSubmit }: {
+function PengayaanSection({ step, chapterId, postTestOptional, unlocked, user, displayName }: {
   step: number;
-  chapter: any;
+  chapterId: string;
+  postTestOptional: NonNullable<Chapter['postTestOptional']>;
   unlocked: boolean;
-  onSubmit: (link: string) => void;
+  user: any;
+  displayName: string;
 }) {
+  const myAnswer = user ? postTestOptional.answer?.find((a: any) => a.userId === user.uid) : null;
+  const submitted = !!myAnswer;
   const [link, setLink] = useState('');
-  const answerCount = chapter.postTestOptional?.answer?.length || 0;
-  const submitted = answerCount > 0;
+
+  const handleSubmit = async () => {
+    if (!user || !link) return;
+    await submitPengayaanLink(chapterId, user.uid, displayName, link);
+  };
 
   return (
     <SectionCard step={step} title="Tugas Pengayaan (Opsional)"
       description="Tugas tambahan untuk memperdalam pemahaman." done={submitted} unlocked={unlocked}>
       <div className="ml-11 space-y-3">
         <div className="p-4 bg-[#FBF8F4] rounded-xl border border-[#1F3D30]/5">
-          <ReactMarkdown>{chapter.postTestOptional.instruction}</ReactMarkdown>
+          <ReactMarkdown>{postTestOptional.instruction}</ReactMarkdown>
         </div>
         {!submitted ? (
           <div className="flex gap-2">
             <input type="url" placeholder="Link Google Drive / YouTube" value={link}
               onChange={e => setLink(e.target.value)}
               className="flex-1 px-3 py-2 border border-[#d4dcd0] rounded-xl text-sm" />
-            <button onClick={() => onSubmit(link)} disabled={!link}
+            <button onClick={handleSubmit} disabled={!link}
               className="px-4 py-2 bg-[#C8A84E] text-white rounded-xl text-sm font-semibold disabled:opacity-50">Submit</button>
           </div>
         ) : (
-          <p className="text-sm text-emerald-700 font-medium">✅ Tugas pengayaan sudah dikumpulkan</p>
+          <div>
+            <p className="text-sm text-emerald-700 font-medium">✅ Tugas pengayaan sudah dikumpulkan</p>
+            {myAnswer?.link && (
+              <a href={myAnswer.link} target="_blank" rel="noopener noreferrer"
+                className="text-xs text-[#1F3D30] underline mt-1 inline-block">📎 Lihat submission</a>
+            )}
+          </div>
         )}
       </div>
     </SectionCard>

@@ -33,7 +33,7 @@ export default function DashboardPage() {
   const currentProgress = currentChapter ? progress[currentChapter.id] : undefined;
   const cIdx = currentChapter ? chapters.findIndex(c => c.id === currentChapter.id) : 0;
 
-  const inbox = computeTaskInbox(chapters, progress);
+  const inbox = computeTaskInbox(chapters, progress, user?.uid);
   const pendingTasks = inbox.filter(i => i.status === 'pending');
 
   const steps = currentChapter ? [
@@ -53,6 +53,14 @@ export default function DashboardPage() {
     setSeeding(false);
     setTimeout(() => setSeedMsg(null), 4000);
   };
+
+  // Score averages from nilai subcollection
+  const pretestScores = scores.filter(s => s.type === 'pretest');
+  const posttestScores = scores.filter(s => s.type === 'posttest');
+  const avgPretest = pretestScores.length > 0 ? Math.round(pretestScores.reduce((a, b) => a + b.score, 0) / pretestScores.length) : null;
+  const avgPosttest = posttestScores.length > 0 ? Math.round(posttestScores.reduce((a, b) => a + b.score, 0) / posttestScores.length) : null;
+  const pengayaanCount = scores.filter(s => s.type === 'pengayaan').length;
+  const tugasDone = scores.filter(s => s.type === 'tugas').length;
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
@@ -91,11 +99,8 @@ export default function DashboardPage() {
             <>
               <p className="text-lg">📭 Belum ada materi</p>
               <p className="text-sm text-[#5C7A6E]">Database masih kosong. Klik &quot;Reset Data&quot; di kanan atas atau tombol di bawah untuk mengisi materi.</p>
-              <button
-                onClick={handleSeed}
-                disabled={seeding}
-                className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#1F3D30] text-white rounded-xl text-sm font-semibold hover:bg-[#2A4D3E] disabled:opacity-50 transition-colors"
-              >
+              <button onClick={handleSeed} disabled={seeding}
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#1F3D30] text-white rounded-xl text-sm font-semibold hover:bg-[#2A4D3E] disabled:opacity-50 transition-colors">
                 {seeding ? '⏳ Mengisi materi...' : '🌱 Seed Data Materi'}
               </button>
             </>
@@ -110,7 +115,6 @@ export default function DashboardPage() {
         </div>
       ) : (
         <>
-          {/* Progress Ring */}
           <div className="bg-white rounded-2xl border border-[#1F3D30]/5 p-6 flex items-center gap-6">
             <div className="relative w-20 h-20 flex-shrink-0">
               <svg className="w-20 h-20 -rotate-90" viewBox="0 0 80 80">
@@ -138,7 +142,6 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Current Chapter Card */}
           <div className="bg-white rounded-2xl border border-[#1F3D30]/5 overflow-hidden">
             <div className={`h-2 bg-gradient-to-r ${currentChapter.coverColor}`} />
             <div className="p-5">
@@ -150,7 +153,6 @@ export default function DashboardPage() {
                 </div>
                 <span className="text-4xl">{currentChapter.coverEmoji}</span>
               </div>
-
               <div className="flex gap-2 mt-4 flex-wrap">
                 {steps.map((s, i) => {
                   const isSkipped = s.label === 'Pre-Test' && !currentChapter.preTest;
@@ -165,7 +167,6 @@ export default function DashboardPage() {
                   );
                 })}
               </div>
-
               <Link href={`/materi/${currentChapter.id}`}
                 className="mt-4 block w-full text-center py-2.5 bg-[#1F3D30] text-white rounded-xl text-sm font-semibold hover:bg-[#2A4D3E] transition-colors">
                 Buka Bab →
@@ -201,23 +202,22 @@ export default function DashboardPage() {
       )}
 
       <div className="grid grid-cols-2 gap-3">
-        {([
-          { label: 'Pre-Test', type: 'pretest' as const, color: 'bg-amber-50' },
-          { label: 'Post-Test', type: 'posttest' as const, color: 'bg-emerald-50' },
-          { label: 'Pengayaan', type: 'pengayaan' as const, color: 'bg-purple-50' },
-          { label: 'Tugas', type: 'tugas' as const, color: 'bg-blue-50' },
-        ]).map(({ label, type, color }) => {
-          const filtered = scores.filter(s => s.type === type);
-          const avg = filtered.length > 0
-            ? Math.round(filtered.reduce((sum, s) => sum + s.score, 0) / filtered.length)
-            : '—';
-          return (
-            <Link key={label} href="/nilai" className={`rounded-2xl border border-[#1F3D30]/5 p-3 hover:border-[#1F3D30]/15 transition-colors ${typeof avg !== 'number' ? 'bg-white' : color}`}>
-              <p className="text-lg font-bold text-[#1F3D30]">{avg}</p>
-              <p className="text-[10px] text-[#5C7A6E] uppercase">{label}</p>
-            </Link>
-          );
-        })}
+        <Link href="/nilai" className="rounded-2xl border border-[#1F3D30]/5 p-3 hover:border-[#1F3D30]/15 transition-colors bg-white">
+          <p className="text-lg font-bold text-[#1F3D30]">{avgPretest ?? '—'}</p>
+          <p className="text-[10px] text-[#5C7A6E] uppercase">Pre-Test Avg</p>
+        </Link>
+        <Link href="/nilai" className="rounded-2xl border border-[#1F3D30]/5 p-3 hover:border-[#1F3D30]/15 transition-colors bg-white">
+          <p className="text-lg font-bold text-[#1F3D30]">{avgPosttest ?? '—'}</p>
+          <p className="text-[10px] text-[#5C7A6E] uppercase">Post-Test Avg</p>
+        </Link>
+        <Link href="/nilai" className="rounded-2xl border border-[#1F3D30]/5 p-3 hover:border-[#1F3D30]/15 transition-colors bg-white">
+          <p className="text-lg font-bold text-[#1F3D30]">{pengayaanCount}</p>
+          <p className="text-[10px] text-[#5C7A6E] uppercase">Pengayaan</p>
+        </Link>
+        <Link href="/nilai" className="rounded-2xl border border-[#1F3D30]/5 p-3 hover:border-[#1F3D30]/15 transition-colors bg-white">
+          <p className="text-lg font-bold text-[#1F3D30]">{tugasDone}</p>
+          <p className="text-[10px] text-[#5C7A6E] uppercase">Tugas Done</p>
+        </Link>
       </div>
     </div>
   );

@@ -1,11 +1,13 @@
 'use client';
 
 import { useChapters, useStudentProgress, computeTaskInbox } from '@/lib/firestore-data';
+import { useAuth } from '@/lib/AuthContext';
 import Link from 'next/link';
 
 export default function TugasPage() {
   const { chapters, loading } = useChapters();
   const { progress } = useStudentProgress();
+  const { user } = useAuth();
 
   if (loading) {
     return (
@@ -15,7 +17,7 @@ export default function TugasPage() {
     );
   }
 
-  const inbox = computeTaskInbox(chapters, progress);
+  const inbox = computeTaskInbox(chapters, progress, user?.uid);
   const pending = inbox.filter(i => i.status === 'pending');
   const submitted = inbox.filter(i => i.status === 'submitted' || i.status === 'graded');
 
