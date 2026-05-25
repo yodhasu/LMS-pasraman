@@ -1,0 +1,19 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+/* Sidebar scroll */
+aside { overflow-y: auto; }
+
+/* Prose overrides for markdown content */
+.prose h2 { font-size: 1.25rem; font-weight: 700; margin-top: 1.5em; margin-bottom: 0.5em; }
+.prose h3 { font-size: 1.1rem; font-weight: 700; margin-top: 1.25em; margin-bottom: 0.5em; }
+.prose p { margin-bottom: 0.75em; line-height: 1.8; }
+.prose ul { padding-left: 1.5em; margin-bottom: 0.75em; }
+.prose li { margin-bottom: 0.25em; }
+.prose strong { color: #1F3D30; }
