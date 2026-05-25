@@ -94,16 +94,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const supabaseUser = data.session?.user ?? null;
       if (!active) return;
       setUser(normalizeUser(supabaseUser));
-      setRole(supabaseUser ? await ensureAppUser(supabaseUser) : null);
+      // Don't await ensureAppUser — it's a REST call that can be slow
+      // when supabase-js auto-refreshes an expired token on mobile.
+      // setLoading(false) must fire immediately so the UI isn't stuck
+      // on a loading spinner while auth-dependent queries resolve.
+      if (supabaseUser) {
+        ensureAppUser(supabaseUser).then(r => { if (active) setRole(r); });
+      } else {
+        setRole(null);
+      }
       if (active) setLoading(false);
     }
 
     loadInitialSession();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       const supabaseUser = session?.user ?? null;
       setUser(normalizeUser(supabaseUser));
-      setRole(supabaseUser ? await ensureAppUser(supabaseUser) : null);
+      if (supabaseUser) {
+        ensureAppUser(supabaseUser).then(r => { if (active) setRole(r); });
+      } else {
+        setRole(null);
+      }
       setLoading(false);
     });
 
