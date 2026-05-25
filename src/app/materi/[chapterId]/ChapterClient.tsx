@@ -124,11 +124,22 @@ export default function ChapterClient() {
     if (user) markChapterStep(user.uid, chapterId, 'materi');
   };
 
-  const handleTugasComplete = (taskIdx: number) => (score: number, answers: Record<string, number>) => {
+  const handleTugasComplete = (taskIdx: number) => async (score: number, answers: Record<string, number>) => {
     if (user) {
-      markChapterStep(user.uid, chapterId, 'tugas');
-      saveScore(user.uid, chapterId, 'tugas', score);
-      submitTaskAnswer(chapterId, taskIdx, user.uid, displayName, answers, score);
+      await submitTaskAnswer(chapterId, taskIdx, user.uid, displayName, answers, score);
+      await saveScore(user.uid, chapterId, 'tugas', score);
+
+      // Mark tugas step done if this was the last pending task
+      // (for single-task chapters this is always true; for multi-task we check all)
+      const hasPendingTasks = chapter.tasks.some((task) => {
+        const submitted = (task.answer || []).some(a => a.userId === user.uid);
+        return !submitted;
+      });
+      // Since arrayUnion is async, the task we just submitted to may not show
+      // our answer yet in the snapshot — treat it as submitted optimistically
+      if (!hasPendingTasks || chapter.tasks.length === 1) {
+        await markChapterStep(user.uid, chapterId, 'tugas');
+      }
     }
   };
 

@@ -12,7 +12,7 @@ const links = [
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
 
   return (
     <aside className="hidden lg:flex fixed left-0 top-0 h-full w-64 bg-white border-r border-[#1F3D30]/5 flex-col z-30">
@@ -45,7 +45,10 @@ export default function Sidebar() {
         })}
       </nav>
       <div className="p-4 border-t border-[#1F3D30]/5">
-        <Link href="/login" className="flex items-center gap-3 cursor-pointer">
+        <button
+          onClick={logout}
+          className="flex items-center gap-3 w-full text-left cursor-pointer hover:bg-[#1F3D30]/5 rounded-lg p-2 -m-2 transition-colors"
+        >
           <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-[#C8A84E] to-[#E8C84E] flex items-center justify-center text-xs font-bold text-white">
             {(user?.displayName || user?.email || '?')[0].toUpperCase()}
           </div>
@@ -53,9 +56,9 @@ export default function Sidebar() {
             <p className="text-sm font-semibold text-[#1F3D30]">
               {user?.displayName || 'Siswa'}
             </p>
-            <p className="text-xs text-[#8A9E95]">Pengaturan</p>
+            <p className="text-xs text-[#8A9E95]">Keluar</p>
           </div>
-        </Link>
+        </button>
       </div>
     </aside>
   );

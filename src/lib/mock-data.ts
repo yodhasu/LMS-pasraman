@@ -37,7 +37,7 @@ Susila bukan hanya teori. Setiap hari kita dihadapkan pada pilihan:
 - Menghormati orang tua atau membantah
 
 Pilihan-pilihan kecil inilah yang membentuk karma kita.`,
-    materialVideoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+    materialVideoUrl: null,
     preTest: [
       { id: 'pre1-1', question: 'Apa arti kata "Su" dalam Susila?', options: ['Kuat', 'Baik', 'Suci', 'Agung'], correctIndex: 1 },
       { id: 'pre1-2', question: 'Manawa Dharmasastra termasuk golongan kitab?', options: ['Weda Sruti', 'Weda Smerti', 'Itihasa', 'Purana'], correctIndex: 1 },
@@ -243,7 +243,7 @@ Dalam Mahabharata, Yudhistira memimpin dengan berpegang teguh pada Dharma. Ia ti
 ### Refleksi
 
 > "Jika kamu ingin orang lain memperlakukanmu dengan baik, perlakukanlah mereka dengan baik terlebih dahulu."`,
-    materialVideoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+    materialVideoUrl: null,
     preTest: [
       { id: 'pre4-1', question: '"Tat Twam Asi" berasal dari kitab?', options: ['Bhagavad Gita', 'Chandogya Upanishad', 'Ramayana', 'Manawa Dharmasastra'], correctIndex: 1 },
     ],

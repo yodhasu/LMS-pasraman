@@ -59,16 +59,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         setRole((userRole as 'student' | 'teacher') || null);
 
-        // Ensure Firestore doc exists for new users
+        // Ensure Firestore doc exists for ALL new users (not just Google-linked)
         const userRef = doc(db, 'users', firebaseUser.uid);
         const snap = await getDoc(userRef);
         if (!snap.exists()) {
           await setDoc(userRef, {
             username: firebaseUser.email?.split('@')[0] || 'user',
-            displayName: firebaseUser.displayName || 'Siswa',
+            displayName: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Siswa',
             role: 'student',
-            googleLinked: true,
-            nilai: {},
+            googleLinked: firebaseUser.providerData.some((p) => p.providerId === 'google.com'),
           });
         }
       } else {
