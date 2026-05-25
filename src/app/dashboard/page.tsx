@@ -10,6 +10,7 @@ export default function DashboardPage() {
   const { chapters, loading: chLoading } = useChapters();
   const { progress } = useStudentProgress();
   const [seeding, setSeeding] = useState(false);
+  const [seedMsg, setSeedMsg] = useState<string | null>(null);
 
   if (chLoading) {
     return (
@@ -20,12 +21,12 @@ export default function DashboardPage() {
   }
 
   const totalBab = chapters.length;
-  const completedBab = chapters.filter(c => progress[c.id]?.postTestMandatoryCompleted).length;
+  const completedBab = chapters.filter(c => progress[c.id]?.complete).length;
   const pct = totalBab > 0 ? Math.round((completedBab / totalBab) * 100) : 0;
 
   const currentChapter = chapters.find(c => {
     const p = progress[c.id];
-    return p && !p.postTestMandatoryCompleted;
+    return p && !p.complete;
   }) || chapters[0];
 
   const currentProgress = currentChapter ? progress[currentChapter.id] : undefined;
@@ -35,13 +36,22 @@ export default function DashboardPage() {
   const pendingTasks = inbox.filter(i => i.status === 'pending');
 
   const steps = currentChapter ? [
-    { label: 'Pre-Test', done: currentProgress?.preTestCompleted || !currentChapter.preTest },
-    { label: 'Materi', done: currentProgress?.materialCompleted },
-    { label: 'Tugas', done: currentChapter.tasks.every(t => currentProgress?.completedTaskIds.includes(t.id)) },
-    { label: 'Post-Test Wajib', done: currentProgress?.postTestMandatoryCompleted },
+    { label: 'Pre-Test', done: currentProgress?.pretest || !currentChapter.preTest },
+    { label: 'Materi', done: currentProgress?.materi },
+    { label: 'Tugas', done: currentChapter.tasks.length === 0 || (currentProgress?.tugas ?? false) },
+    { label: 'Post-Test Wajib', done: currentProgress?.posttest },
   ] : [];
 
   const displayName = user?.displayName || user?.email?.split('@')[0] || 'Siswa';
+
+  const handleSeed = async () => {
+    setSeeding(true);
+    setSeedMsg(null);
+    const result = await seedChapters();
+    setSeedMsg(result.message);
+    setSeeding(false);
+    setTimeout(() => setSeedMsg(null), 4000);
+  };
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
@@ -52,7 +62,7 @@ export default function DashboardPage() {
             <p className="text-sm text-[#5C7A6E] mt-0.5">Lanjutkan belajar Susila Hindu</p>
           </div>
           <button
-            onClick={async () => { setSeeding(true); try { await seedChapters(); } finally { setSeeding(false); }}}
+            onClick={handleSeed}
             disabled={seeding}
             className="text-xs text-[#5C7A6E] hover:text-[#1F3D30] underline underline-offset-2 disabled:opacity-50 flex-shrink-0"
             title="Hapus semua data & isi ulang materi"
@@ -60,12 +70,17 @@ export default function DashboardPage() {
             {seeding ? '⏳' : '🔁 Reset Data'}
           </button>
         </div>
+        {seedMsg && (
+          <div className={`mt-2 text-xs font-medium px-3 py-1.5 rounded-lg ${seedMsg.startsWith('✅') ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+            {seedMsg}
+          </div>
+        )}
       </div>
 
       {chapters.length > 0 && chapters.length !== 6 && (
         <div className="bg-amber-50 rounded-2xl border border-amber-200 p-4 text-center">
           <p className="text-sm font-semibold text-amber-800">⚠️ Data tidak normal: {chapters.length} bab (seharusnya 6)</p>
-          <p className="text-xs text-amber-600 mt-1">Klik "🔁 Reset Data" di kanan atas untuk memperbaiki.</p>
+          <p className="text-xs text-amber-600 mt-1">Klik &quot;🔁 Reset Data&quot; di kanan atas untuk memperbaiki.</p>
         </div>
       )}
 
@@ -74,9 +89,9 @@ export default function DashboardPage() {
           {chapters.length === 0 ? (
             <>
               <p className="text-lg">📭 Belum ada materi</p>
-              <p className="text-sm text-[#5C7A6E]">Database masih kosong. Klik "Reset Data" di kanan atas atau tombol di bawah untuk mengisi materi.</p>
+              <p className="text-sm text-[#5C7A6E]">Database masih kosong. Klik &quot;Reset Data&quot; di kanan atas atau tombol di bawah untuk mengisi materi.</p>
               <button
-                onClick={async () => { setSeeding(true); try { await seedChapters(); } finally { setSeeding(false); }}}
+                onClick={handleSeed}
                 disabled={seeding}
                 className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#1F3D30] text-white rounded-xl text-sm font-semibold hover:bg-[#2A4D3E] disabled:opacity-50 transition-colors"
               >
@@ -86,7 +101,7 @@ export default function DashboardPage() {
           ) : chapters.length !== 6 ? (
             <>
               <p className="text-lg">⚠️ Data Tidak Normal</p>
-              <p className="text-sm text-[#5C7A6E]">Terdeteksi {chapters.length} bab (seharusnya 6). Klik "Reset Data" di kanan atas untuk memperbaiki.</p>
+              <p className="text-sm text-[#5C7A6E]">Terdeteksi {chapters.length} bab (seharusnya 6). Klik &quot;Reset Data&quot; di kanan atas untuk memperbaiki.</p>
             </>
           ) : (
             <p className="text-lg">🎉 Semua bab sudah selesai!</p>
@@ -185,13 +200,16 @@ export default function DashboardPage() {
       )}
 
       <div className="grid grid-cols-2 gap-3">
-        {[
-          { label: 'Pre-Test', key: 'preTestScore' as const, color: 'bg-amber-50' },
-          { label: 'Post-Test', key: 'postTestMandatoryScore' as const, color: 'bg-emerald-50' },
-          { label: 'Pengayaan', key: 'postTestOptionalScore' as const, color: 'bg-purple-50' },
-          { label: 'Tugas', key: 'postTestOptionalScore' as const, color: 'bg-blue-50' },
-        ].map(({ label, key, color }) => {
-          const scored = chapters.filter(c => progress[c.id]?.[key] != null);
+        {([
+          { label: 'Pre-Test', key: 'pretestScore' as const, color: 'bg-amber-50' },
+          { label: 'Post-Test', key: 'posttestScore' as const, color: 'bg-emerald-50' },
+          { label: 'Pengayaan', key: 'pengayaanScore' as const, color: 'bg-purple-50' },
+          { label: 'Tugas', key: 'pengayaanScore' as const, color: 'bg-blue-50' },
+        ]).map(({ label, key, color }) => {
+          const scored = chapters.filter(c => {
+            const v = progress[c.id]?.[key];
+            return v != null;
+          });
           const avg = scored.length > 0
             ? Math.round(scored.reduce((sum, c) => sum + (progress[c.id]?.[key] || 0), 0) / scored.length)
             : '—';

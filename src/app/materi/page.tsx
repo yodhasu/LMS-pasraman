@@ -25,8 +25,8 @@ export default function MateriPage() {
       <div className="grid grid-cols-2 gap-4">
         {chapters.map((chapter, i) => {
           const prog = progress[chapter.id];
-          const isCompleted = prog?.postTestMandatoryCompleted;
-          const isAvailable = i === 0 || (chapters[i - 1] && progress[chapters[i - 1].id]?.postTestMandatoryCompleted);
+          const isCompleted = prog?.complete;
+          const isAvailable = i === 0 || (chapters[i - 1] && progress[chapters[i - 1].id]?.complete);
           const isLocked = !isAvailable && !isCompleted;
 
           if (isLocked) {
@@ -53,7 +53,7 @@ export default function MateriPage() {
               )}
               {!isCompleted && isAvailable && (
                 <div className="mt-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 text-[11px] font-semibold">
-                  {prog?.materialCompleted ? '📝 Ada Tugas' : '📖 Belum Mulai'}
+                  {prog?.materi ? '📝 Ada Tugas' : '📖 Belum Mulai'}
                 </div>
               )}
             </Link>

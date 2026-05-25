@@ -1,14 +1,26 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { collection, doc, getDoc, getDocs, setDoc, updateDoc, arrayUnion, onSnapshot } from 'firebase/firestore';
+import {
+  collection, doc, getDoc, getDocs, setDoc, updateDoc, onSnapshot
+} from 'firebase/firestore';
 import { db, auth } from '@/lib/firebase';
-import { Chapter, ChapterProgress, StudentProgressMap, TaskInboxItem } from '@/lib/types';
+import { Chapter, ChapterProgressDetail, StudentProgressMap, TaskInboxItem } from '@/lib/types';
 import { onAuthStateChanged, User } from 'firebase/auth';
 
-// ── Chapters ──
+// ── Constants ──
 const VALID_CHAPTER_IDS = ['bab-1', 'bab-2', 'bab-3', 'bab-4', 'bab-5', 'bab-6'];
 
+const DEFAULT_PROGRESS: ChapterProgressDetail = {
+  pretest: false, pretestScore: null,
+  materi: false,
+  tugas: false,
+  posttest: false, posttestScore: null,
+  complete: false,
+  pengayaanLink: null, pengayaanScore: null,
+};
+
+// ── Chapters (read-only from Firestore) ──
 export function useChapters() {
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [loading, setLoading] = useState(true);
@@ -46,7 +58,7 @@ export function useChapters() {
   return { chapters, loading };
 }
 
-// ── Student Progress ──
+// ── Student Progress (reads progress map from users/{uid}) ──
 export function useStudentProgress() {
   const [progress, setProgress] = useState<StudentProgressMap>({});
   const [user, setUser] = useState<User | null>(null);
@@ -58,24 +70,24 @@ export function useStudentProgress() {
 
   useEffect(() => {
     if (!user) return;
-    const unsub = onSnapshot(doc(db, 'users', user.uid), (snap) => {
+    const ref = doc(db, 'users', user.uid);
+    const unsub = onSnapshot(ref, (snap) => {
       if (snap.exists()) {
         const data = snap.data();
-        const completedChapters: string[] = data.completedChapters || [];
-        const scores: Record<string, Record<string, number | null>> = data.scores || {};
+        const progressMap = data.progress || {};
         const mapped: StudentProgressMap = {};
         for (const chapterId of VALID_CHAPTER_IDS) {
-          const s = scores[chapterId] || {};
+          const raw = progressMap[chapterId] || {};
           mapped[chapterId] = {
-            preTestCompleted: false,
-            preTestScore: s.pretest ?? null,
-            materialCompleted: false,
-            completedTaskIds: [],
-            postTestMandatoryCompleted: completedChapters.includes(chapterId),
-            postTestMandatoryScore: s.posttest ?? null,
-            postTestOptionalSubmitted: false,
-            postTestOptionalLink: null,
-            postTestOptionalScore: s.pengayaan ?? null,
+            pretest: raw.pretest === true,
+            pretestScore: typeof raw.pretestScore === 'number' ? raw.pretestScore : null,
+            materi: raw.materi === true,
+            tugas: raw.tugas === true,
+            posttest: raw.posttest === true,
+            posttestScore: typeof raw.posttestScore === 'number' ? raw.posttestScore : null,
+            complete: raw.complete === true,
+            pengayaanLink: raw.pengayaanLink || null,
+            pengayaanScore: typeof raw.pengayaanScore === 'number' ? raw.pengayaanScore : null,
           };
         }
         setProgress(mapped);
@@ -89,43 +101,80 @@ export function useStudentProgress() {
   return { progress, user };
 }
 
-// ── Save score ──
-export async function saveScore(
+// ── Mark a chapter step as done (persisted to Firestore) ──
+export async function markChapterStep(
   userId: string,
   chapterId: string,
-  scoreType: 'pretest' | 'posttest' | 'pengayaan' | 'tugas',
-  score: number
+  step: 'pretest' | 'materi' | 'tugas' | 'posttest',
+  score?: number
 ) {
   const ref = doc(db, 'users', userId);
-  await updateDoc(ref, {
-    [`scores.${chapterId}.${scoreType}`]: score,
-  });
-}
 
-// ── Mark chapter as completed ──
-export async function markChapterCompleted(userId: string, chapterId: string) {
-  const ref = doc(db, 'users', userId);
-  await updateDoc(ref, {
-    completedChapters: arrayUnion(chapterId),
-  });
-}
+  // Read current progress
+  const userSnap = await getDoc(ref);
+  const allProgress = userSnap.exists() ? (userSnap.data().progress || {}) : {};
+  const current: ChapterProgressDetail = allProgress[chapterId]
+    ? { ...DEFAULT_PROGRESS, ...allProgress[chapterId] }
+    : { ...DEFAULT_PROGRESS };
 
-// ── Seed chapters ──
-export async function seedChapters() {
-  const { CHAPTERS } = await import('./mock-data');
-  
-  const existingSnap = await getDocs(collection(db, 'materi'));
-  const cleanup = existingSnap.docs
-    .filter(d => !VALID_CHAPTER_IDS.includes(d.id))
-    .map(d => setDoc(doc(db, 'materi', d.id), { _junk: true, orderIndex: -1 }));
-  await Promise.allSettled(cleanup);
-  
-  const batch = [];
-  for (const chapter of CHAPTERS) {
-    const { id, ...data } = chapter;
-    batch.push(setDoc(doc(db, 'materi', id), data));
+  // Apply step
+  current[step] = true;
+  if (score !== undefined) {
+    if (step === 'pretest') current.pretestScore = score;
+    if (step === 'posttest') current.posttestScore = score;
   }
-  await Promise.all(batch);
+
+  // Auto-compute 'complete'
+  current.complete =
+    current.pretest === true &&
+    current.materi === true &&
+    current.tugas === true &&
+    current.posttest === true;
+
+  await updateDoc(ref, {
+    [`progress.${chapterId}`]: current,
+  });
+}
+
+// ── Save pengayaan link ──
+export async function savePengayaanLink(userId: string, chapterId: string, link: string) {
+  const ref = doc(db, 'users', userId);
+  const userSnap = await getDoc(ref);
+  const allProgress = userSnap.exists() ? (userSnap.data().progress || {}) : {};
+  const current: ChapterProgressDetail = allProgress[chapterId]
+    ? { ...DEFAULT_PROGRESS, ...allProgress[chapterId] }
+    : { ...DEFAULT_PROGRESS };
+
+  current.pengayaanLink = link;
+  await updateDoc(ref, {
+    [`progress.${chapterId}`]: current,
+  });
+}
+
+// ── Seed chapters (returns result for UI feedback) ──
+export async function seedChapters(): Promise<{ ok: boolean; message: string }> {
+  try {
+    const { CHAPTERS } = await import('./mock-data');
+
+    // Clear existing
+    const existingSnap = await getDocs(collection(db, 'materi'));
+    const deletions = existingSnap.docs.map(d =>
+      setDoc(doc(db, 'materi', d.id), { _deleted: true, orderIndex: -1 })
+    );
+    await Promise.allSettled(deletions);
+
+    // Write fresh
+    const writes = CHAPTERS.map((chapter: Chapter) => {
+      const { id, ...data } = chapter;
+      return setDoc(doc(db, 'materi', id), data);
+    });
+    await Promise.all(writes);
+
+    return { ok: true, message: `✅ ${CHAPTERS.length} bab berhasil diisi ulang` };
+  } catch (err: any) {
+    console.error('seedChapters failed:', err);
+    return { ok: false, message: `❌ Gagal: ${err.message || 'unknown error'}` };
+  }
 }
 
 // ── Compute task inbox ──
@@ -142,11 +191,11 @@ export function computeTaskInbox(
         chapterId: chapter.id,
         chapterTitle: chapter.title,
         task,
-        status: prog.completedTaskIds.includes(task.id) ? 'submitted' : 'pending',
+        status: prog.tugas ? 'submitted' : 'pending',
         score: null,
       });
     }
-    if (chapter.postTestOptional && prog.postTestOptionalSubmitted) {
+    if (chapter.postTestOptional && prog.pengayaanLink) {
       items.push({
         chapterId: chapter.id,
         chapterTitle: chapter.title,
@@ -157,8 +206,8 @@ export function computeTaskInbox(
           dueDate: null,
           type: 'submission_link',
         },
-        status: prog.postTestOptionalScore !== null ? 'graded' : 'submitted',
-        score: prog.postTestOptionalScore,
+        status: (prog.pengayaanScore ?? null) !== null ? 'graded' : 'submitted',
+        score: prog.pengayaanScore ?? null,
       });
     }
   }

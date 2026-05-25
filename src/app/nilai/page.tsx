@@ -18,11 +18,11 @@ export default function NilaiPage() {
     const p = progress[c.id];
     return {
       chapter: c, idx: i,
-      pretest: p?.preTestScore ?? null,
-      posttest: p?.postTestMandatoryScore ?? null,
-      pengayaan: p?.postTestOptionalScore ?? null,
-      tugas: p?.postTestOptionalScore ?? null, // same field for now, teacher-input
-      isDone: p?.postTestMandatoryCompleted ?? false,
+      pretest: p?.pretestScore ?? null,
+      posttest: p?.posttestScore ?? null,
+      pengayaan: p?.pengayaanScore ?? null,
+      tugas: p?.pengayaanScore ?? null,
+      isDone: p?.complete ?? false,
     };
   });
 

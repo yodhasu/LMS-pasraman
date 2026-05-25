@@ -33,6 +33,25 @@ export interface Chapter {
   coverColor: string; // tailwind gradient classes e.g. 'from-amber-100 to-orange-200'
 }
 
+// ── NEW: Per-chapter progress stored under users/{uid}/progress/{chapterId} ──
+export interface ChapterProgressDetail {
+  pretest: boolean;
+  pretestScore: number | null;
+  materi: boolean;
+  tugas: boolean;
+  posttest: boolean;
+  posttestScore: number | null;
+  complete: boolean; // auto-computed when pretest + materi + tugas + posttest all true
+  pengayaanLink: string | null;
+  pengayaanScore: number | null;
+}
+
+// ── Backward compat — maps chapterId to its detail ──
+export interface StudentProgressMap {
+  [chapterId: string]: ChapterProgressDetail;
+}
+
+// ── Legacy interface kept for backward compat with any remaining code ──
 export interface ChapterProgress {
   preTestCompleted: boolean;
   preTestScore: number | null;
@@ -49,10 +68,6 @@ export interface StudentInfo {
   name: string;
   className: string;
   semester: string;
-}
-
-export interface StudentProgressMap {
-  [chapterId: string]: ChapterProgress;
 }
 
 export interface TaskInboxItem {
