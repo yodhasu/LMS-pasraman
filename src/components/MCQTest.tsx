@@ -4,8 +4,8 @@ import { MCQ } from '@/lib/types';
 
 interface Props {
   questions: MCQ[];
-  type?: 'pre' | 'post';
-  onComplete?: (score: number) => void;
+  type?: 'pre' | 'post' | 'tugas';
+  onComplete?: (score: number, answers: Record<string, number>) => void;
 }
 
 export default function MCQTest({ questions, type = 'post', onComplete }: Props) {
@@ -21,27 +21,32 @@ export default function MCQTest({ questions, type = 'post', onComplete }: Props)
     const s = Math.round((correct / questions.length) * 100);
     setScore(s);
     setSubmitted(true);
-    if (onComplete) onComplete(s);
+    if (onComplete) onComplete(s, { ...answers });
   };
 
   const allAnswered = questions.every(q => answers[q.id] !== undefined);
   const isPre = type === 'pre';
+  const isTugas = type === 'tugas';
 
   if (submitted && score !== null) {
     const passed = score >= 70;
     return (
       <div className={`p-5 rounded-2xl border-2 ${passed ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}`}>
         <div className="text-center">
-          <div className="text-3xl mb-2">{passed ? (isPre ? '👏' : '🎉') : '📚'}</div>
+          <div className="text-3xl mb-2">{passed ? (isPre ? '👏' : isTugas ? '✅' : '🎉') : '📚'}</div>
           <h3 className="text-lg font-bold mb-1">
             {isPre
               ? `Skor Pre-Test: ${score}`
+              : isTugas
+              ? `Skor Tugas: ${score}`
               : passed
               ? 'Selamat, kamu lulus!'
               : 'Belum lulus, coba lagi'}
           </h3>
           <p className="text-sm text-[#5C7A6E] mb-3">
-            {isPre ? 'Pre-test berhasil dikerjakan. Lanjut ke materi ya!' : passed ? 'Post-test selesai. Bab ini tuntas!' : 'KKM: 70. Kamu bisa mengulangi.'}
+            {isPre ? 'Pre-test berhasil dikerjakan. Lanjut ke materi ya!'
+              : isTugas ? 'Tugas berhasil dikerjakan!'
+              : passed ? 'Post-test selesai. Bab ini tuntas!' : 'KKM: 70. Kamu bisa mengulangi.'}
           </p>
           <div className="space-y-1.5 text-left">
             {questions.map((q, i) => {
@@ -56,7 +61,7 @@ export default function MCQTest({ questions, type = 'post', onComplete }: Props)
               );
             })}
           </div>
-          {!passed && !isPre && (
+          {!passed && !isPre && !isTugas && (
             <button
               onClick={() => { setSubmitted(false); setAnswers({}); setScore(null); }}
               className="mt-4 px-5 py-2 bg-[#1F3D30] text-white rounded-xl text-sm font-semibold hover:bg-[#2A5A44] transition-colors"
@@ -73,10 +78,10 @@ export default function MCQTest({ questions, type = 'post', onComplete }: Props)
     <div className="space-y-4">
       <div className="p-4 rounded-xl bg-[#C8A84E]/10 border border-[#C8A84E]/20">
         <p className="text-sm font-semibold text-[#8A6D2B]">
-          {isPre ? '📋 Pre-Test' : '📋 Post-Test'} — {questions.length} soal pilihan ganda
+          {isPre ? '📋 Pre-Test' : isTugas ? '📝 Tugas' : '📋 Post-Test'} — {questions.length} soal pilihan ganda
         </p>
         <p className="text-xs text-[#5C7A6E] mt-0.5">
-          {isPre ? 'Kerjakan dulu ya, lalu lanjut ke materi.' : 'KKM: 70. Jawab semua soal lalu kumpulkan.'}
+          {isPre ? 'Kerjakan dulu ya, lalu lanjut ke materi.' : isTugas ? 'Kerjakan tugas berikut.' : 'KKM: 70. Jawab semua soal lalu kumpulkan.'}
         </p>
       </div>
       {questions.map((q, i) => (

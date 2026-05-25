@@ -44,7 +44,13 @@ Pilihan-pilihan kecil inilah yang membentuk karma kita.`,
       { id: 'pre1-3', question: 'Sebutan untuk wahyu suci yang didengar para Rsi adalah?', options: ['Weda Smerti', 'Weda Sruti', 'Bhagavad Gita', 'Nitisastra'], correctIndex: 1 },
     ],
     tasks: [
-      { id: 't1-1', title: 'Refleksi Diri', description: 'Tuliskan 3 contoh perilaku Susila yang kamu lakukan hari ini dalam kehidupan sehari-hari. Submit dalam bentuk teks.', dueDate: '2026-05-28', type: 'submission_link' },
+      { id: 't1-1', title: 'Refleksi Diri', description: 'Jawab soal-soal berikut berdasarkan pemahamanmu tentang Susila.', dueDate: '2026-05-28', type: 'mcq',
+        questions: [
+          { id: 't1-1-q1', question: 'Apa arti kata "Susila"?', options: ['Perilaku baik dan benar sesuai Dharma', 'Kekuatan fisik', 'Kekayaan materi', 'Kecerdasan akal'], correctIndex: 0 },
+          { id: 't1-1-q2', question: 'Dari bahasa apa kata Susila berasal?', options: ['Jawa Kuno', 'Sanskerta', 'Pali', 'Latin'], correctIndex: 1 },
+          { id: 't1-1-q3', question: 'Apa sumber utama ajaran Susila dalam Hindu?', options: ['Koran', 'Weda', 'Internet', 'Primbon'], correctIndex: 1 },
+        ],
+        answer: [] },
     ],
     postTestMandatory: [
       { id: 'post1-1', question: 'Apa arti kata "Sila" dalam Susila?', options: ['Kuat', 'Perilaku', 'Suci', 'Tuhan'], correctIndex: 1 },
@@ -62,6 +68,7 @@ Pilihan-pilihan kecil inilah yang membentuk karma kita.`,
    - Apa manfaat yang kamu rasakan
 3. Upload ke YouTube (unlisted) atau Google Drive
 4. **Submit link video di sini**`,
+      answer: [],
     },
     coverEmoji: '🪷',
     coverColor: 'from-orange-100 to-amber-200',
@@ -117,7 +124,13 @@ Perbuatan nyata yang mencerminkan Dharma. Pikiran baik + ucapan baik harus diwuj
       { id: 'pre2-2', question: 'Manacika berarti?', options: ['Berkata baik', 'Berpikir baik', 'Berbuat baik', 'Berdoa baik'], correctIndex: 1 },
     ],
     tasks: [
-      { id: 't2-1', title: 'Jurnal Tri Kaya', description: 'Catat selama 3 hari: setiap hari tulis 1 contoh Manacika, 1 Wacika, dan 1 Kayika yang kamu lakukan. Submit hasilnya dalam bentuk teks atau foto jurnal.', dueDate: '2026-06-02', type: 'submission_link' },
+      { id: 't2-1', title: 'Jurnal Tri Kaya', description: 'Jawab soal-soal berikut tentang Tri Kaya Parisudha.', dueDate: '2026-06-02', type: 'mcq',
+        questions: [
+          { id: 't2-1-q1', question: 'Tri Kaya Parisudha mengajarkan penyucian pada tiga hal, yaitu?', options: ['Pikiran, Ucapan, Perbuatan', 'Doa, Puasa, Sedekah', 'Belajar, Bekerja, Beribadah', 'Makan, Minum, Tidur'], correctIndex: 0 },
+          { id: 't2-1-q2', question: 'Seorang siswa yang selalu berpikir positif tentang temannya sedang menerapkan?', options: ['Wacika', 'Kayika', 'Manacika', 'Dharma'], correctIndex: 2 },
+          { id: 't2-1-q3', question: 'Membantu membersihkan pura termasuk contoh dari?', options: ['Manacika', 'Wacika', 'Kayika', 'Asubha Karma'], correctIndex: 2 },
+        ],
+        answer: [] },
     ],
     postTestMandatory: [
       { id: 'post2-1', question: '"Manacika" secara bahasa berarti?', options: ['Pikiran yang baik', 'Ucapan yang baik', 'Perbuatan yang baik', 'Doa yang baik'], correctIndex: 0 },
@@ -191,6 +204,7 @@ Hukum karma bukan hukuman, melainkan konsekuensi alami. Seperti menanam padi aka
    - Definisi Asubha Karma + 5 contoh
    - 3 jenis Karma Phala
 4. Upload ke Google Drive dan **submit link di sini**`,
+      answer: [],
     },
     coverEmoji: '⚖️',
     coverColor: 'from-violet-100 to-purple-200',
@@ -234,7 +248,13 @@ Dalam Mahabharata, Yudhistira memimpin dengan berpegang teguh pada Dharma. Ia ti
       { id: 'pre4-1', question: '"Tat Twam Asi" berasal dari kitab?', options: ['Bhagavad Gita', 'Chandogya Upanishad', 'Ramayana', 'Manawa Dharmasastra'], correctIndex: 1 },
     ],
     tasks: [
-      { id: 't4-1', title: 'Esai Mini: Tat Twam Asi dalam Hidupku', description: 'Tulis esai pendek (minimal 150 kata) tentang bagaimana kamu menerapkan prinsip Tat Twam Asi dalam kehidupan sehari-hari. Submit link Google Docs.', dueDate: '2026-06-04', type: 'submission_link' },
+      { id: 't4-1', title: 'Esai Mini: Tat Twam Asi', description: 'Jawab soal-soal berikut tentang ajaran Tat Twam Asi.', dueDate: '2026-06-04', type: 'mcq',
+        questions: [
+          { id: 't4-1-q1', question: '"Tat Twam Asi" secara harfiah berarti?', options: ['Aku adalah Brahman', 'Engkau adalah Aku', 'Kebenaran pasti menang', 'Hidup adalah penderitaan'], correctIndex: 1 },
+          { id: 't4-1-q2', question: 'Ajaran Tat Twam Asi mengajarkan kita untuk?', options: ['Bersaing dengan orang lain', 'Melihat diri sendiri dalam diri orang lain', 'Menghindari pergaulan', 'Mencari kekayaan'], correctIndex: 1 },
+          { id: 't4-1-q3', question: 'Jika kita menyakiti orang lain, menurut Tat Twam Asi artinya?', options: ['Tidak apa-apa', 'Kita menyakiti diri sendiri', 'Itu hak kita', 'Itu karma mereka'], correctIndex: 1 },
+        ],
+        answer: [] },
     ],
     postTestMandatory: [
       { id: 'post4-1', question: 'Arti harfiah "Tat Twam Asi" adalah?', options: ['Aku adalah Brahman', 'Engkau adalah Aku', 'Kebenaran pasti menang', 'Hidup adalah penderitaan'], correctIndex: 1 },
@@ -250,6 +270,7 @@ Dalam Mahabharata, Yudhistira memimpin dengan berpegang teguh pada Dharma. Ia ti
 2. Contoh tema: toleransi di sekolah, menolong tanpa memandang perbedaan
 3. Upload ke YouTube (unlisted)
 4. **Submit link video di sini**`,
+      answer: [],
     },
     coverEmoji: '🕉️',
     coverColor: 'from-rose-100 to-pink-200',
@@ -387,7 +408,13 @@ Seperti api yang membakar habis dan tidak bisa ditipu oleh apapun, pemimpin haru
     materialVideoUrl: null,
     preTest: null,
     tasks: [
-      { id: 't6-1', title: 'Pemimpin Idolaku', description: 'Pilih satu tokoh (bisa dari sekolah, daerah, atau nasional) yang menurutmu menerapkan Asta Brata. Jelaskan minimal 3 sifat Asta Brata yang dimilikinya. Submit link Google Docs.', dueDate: '2026-06-07', type: 'submission_link' },
+      { id: 't6-1', title: 'Pemimpin Idolaku', description: 'Jawab soal-soal berikut tentang Asta Brata.', dueDate: '2026-06-07', type: 'mcq',
+        questions: [
+          { id: 't6-1-q1', question: 'Berapa jumlah sifat dalam Asta Brata?', options: ['Lima', 'Enam', 'Delapan', 'Sepuluh'], correctIndex: 2 },
+          { id: 't6-1-q2', question: 'Sifat yang mengajarkan pemimpin menjadi penyejuk seperti hujan adalah?', options: ['Agni Brata', 'Indra Brata', 'Yama Brata', 'Surya Brata'], correctIndex: 1 },
+          { id: 't6-1-q3', question: 'Agni Brata mengajarkan pemimpin untuk?', options: ['Bermalas-malasan', 'Berani memberantas kejahatan', 'Menghindari masalah', 'Mencari kekayaan'], correctIndex: 1 },
+        ],
+        answer: [] },
     ],
     postTestMandatory: [
       { id: 'post6-1', question: 'Asta Brata berarti?', options: ['Lima sifat', 'Enam sifat', 'Delapan sifat', 'Sepuluh sifat'], correctIndex: 2 },
@@ -404,6 +431,7 @@ Seperti api yang membakar habis dan tidak bisa ditipu oleh apapun, pemimpin haru
 3. Bisa dibuat dengan Canva, PPT, atau gambar tangan
 4. Upload hasilnya ke Google Drive
 5. **Submit link di sini**`,
+      answer: [],
     },
     coverEmoji: '👑',
     coverColor: 'from-amber-100 to-yellow-200',

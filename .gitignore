@@ -3,3 +3,4 @@ out/
 node_modules/
 .firebase/
 firestore-debug.log
+accounts.json

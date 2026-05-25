@@ -1,10 +1,11 @@
 'use client';
 
-import { useChapters, useStudentProgress } from '@/lib/firestore-data';
+import { useChapters, useNilai } from '@/lib/firestore-data';
+import { ScoreRecord } from '@/lib/types';
 
 export default function NilaiPage() {
   const { chapters, loading } = useChapters();
-  const { progress } = useStudentProgress();
+  const { scores } = useNilai();
 
   if (loading) {
     return (
@@ -14,16 +15,20 @@ export default function NilaiPage() {
     );
   }
 
+  // Group scores by chapter
+  const byChapter: Record<string, ScoreRecord[]> = {};
+  for (const s of scores) {
+    if (!byChapter[s.chapterId]) byChapter[s.chapterId] = [];
+    byChapter[s.chapterId].push(s);
+  }
+
   const chaptersWithScores = chapters.map((c, i) => {
-    const p = progress[c.id];
-    return {
-      chapter: c, idx: i,
-      pretest: p?.pretestScore ?? null,
-      posttest: p?.posttestScore ?? null,
-      pengayaan: p?.pengayaanScore ?? null,
-      tugas: p?.pengayaanScore ?? null,
-      isDone: p?.complete ?? false,
-    };
+    const chScores = byChapter[c.id] || [];
+    const pretest = chScores.find(s => s.type === 'pretest')?.score ?? null;
+    const posttest = chScores.find(s => s.type === 'posttest')?.score ?? null;
+    const tugas = chScores.find(s => s.type === 'tugas')?.score ?? null;
+    const pengayaan = chScores.find(s => s.type === 'pengayaan')?.score ?? null;
+    return { chapter: c, idx: i, pretest, posttest, tugas, pengayaan, hasScores: chScores.length > 0 };
   });
 
   const scoredChapters = chaptersWithScores.filter(c => c.posttest !== null);
@@ -54,11 +59,10 @@ export default function NilaiPage() {
       </div>
 
       <div className="space-y-3">
-        {chaptersWithScores.map(({ chapter, idx, pretest, posttest, pengayaan, tugas, isDone }) => {
-          const hasScores = pretest !== null || posttest !== null;
+        {chaptersWithScores.map(({ chapter, idx, pretest, posttest, tugas, pengayaan, hasScores }) => {
           const delta = pretest !== null && posttest !== null ? posttest - pretest : null;
 
-          if (!isDone && !hasScores) {
+          if (!hasScores) {
             return (
               <div key={chapter.id} className="p-4 rounded-2xl bg-white border border-[#1F3D30]/5 flex items-center gap-4">
                 <span className="text-2xl flex-shrink-0">{chapter.coverEmoji}</span>
@@ -79,14 +83,13 @@ export default function NilaiPage() {
                   <span className="text-xl">{chapter.coverEmoji}</span>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold truncate">Bab {idx + 1}: {chapter.title}</p>
-                    {isDone && <span className="text-[11px] text-emerald-600 font-medium">✓ Selesai</span>}
                   </div>
                 </div>
                 <div className="grid grid-cols-4 gap-2">
                   {scoreItems('Pre-Test', pretest, 'bg-amber-50')}
                   {scoreItems('Post-Test', posttest, 'bg-emerald-50')}
-                  {scoreItems('Pengayaan', pengayaan, 'bg-purple-50')}
                   {scoreItems('Tugas', tugas, 'bg-blue-50')}
+                  {scoreItems('Pengayaan', pengayaan, 'bg-purple-50')}
                 </div>
                 {delta !== null && (
                   <div className="mt-3 text-center py-2 rounded-xl bg-emerald-50">

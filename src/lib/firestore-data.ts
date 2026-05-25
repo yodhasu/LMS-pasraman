@@ -2,25 +2,20 @@
 
 import { useEffect, useState } from 'react';
 import {
-  collection, doc, getDoc, getDocs, setDoc, updateDoc, onSnapshot
+  collection, doc, getDoc, getDocs, setDoc, updateDoc, arrayUnion, onSnapshot
 } from 'firebase/firestore';
 import { db, auth } from '@/lib/firebase';
-import { Chapter, ChapterProgressDetail, StudentProgressMap, TaskInboxItem } from '@/lib/types';
+import { Chapter, ChapterProgressDetail, StudentProgressMap, ScoreRecord, TaskInboxItem, TaskAnswer, PengayaanAnswer } from '@/lib/types';
 import { onAuthStateChanged, User } from 'firebase/auth';
 
 // ── Constants ──
 const VALID_CHAPTER_IDS = ['bab-1', 'bab-2', 'bab-3', 'bab-4', 'bab-5', 'bab-6'];
 
 const DEFAULT_PROGRESS: ChapterProgressDetail = {
-  pretest: false, pretestScore: null,
-  materi: false,
-  tugas: false,
-  posttest: false, posttestScore: null,
-  complete: false,
-  pengayaanLink: null, pengayaanScore: null,
+  pretest: false, materi: false, tugas: false, posttest: false, complete: false,
 };
 
-// ── Chapters (read-only from Firestore) ──
+// ── Chapters ──
 export function useChapters() {
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [loading, setLoading] = useState(true);
@@ -58,7 +53,7 @@ export function useChapters() {
   return { chapters, loading };
 }
 
-// ── Student Progress (reads progress map from users/{uid}) ──
+// ── Student Progress (boolean only, no scores) ──
 export function useStudentProgress() {
   const [progress, setProgress] = useState<StudentProgressMap>({});
   const [user, setUser] = useState<User | null>(null);
@@ -80,14 +75,10 @@ export function useStudentProgress() {
           const raw = progressMap[chapterId] || {};
           mapped[chapterId] = {
             pretest: raw.pretest === true,
-            pretestScore: typeof raw.pretestScore === 'number' ? raw.pretestScore : null,
             materi: raw.materi === true,
             tugas: raw.tugas === true,
             posttest: raw.posttest === true,
-            posttestScore: typeof raw.posttestScore === 'number' ? raw.posttestScore : null,
             complete: raw.complete === true,
-            pengayaanLink: raw.pengayaanLink || null,
-            pengayaanScore: typeof raw.pengayaanScore === 'number' ? raw.pengayaanScore : null,
           };
         }
         setProgress(mapped);
@@ -101,30 +92,70 @@ export function useStudentProgress() {
   return { progress, user };
 }
 
-// ── Mark a chapter step as done (persisted to Firestore) ──
+// ── Nilai / Scores (separate subcollection) ──
+export function useNilai() {
+  const [scores, setScores] = useState<ScoreRecord[]>([]);
+  const [user, setUser] = useState<User | null>(null);
+
+  useEffect(() => {
+    const unsubAuth = onAuthStateChanged(auth, (u) => setUser(u));
+    return () => unsubAuth();
+  }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    const q = collection(db, 'users', user.uid, 'nilai');
+    const unsub = onSnapshot(q, (snap) => {
+      const list: ScoreRecord[] = [];
+      snap.forEach((d) => {
+        const data = d.data();
+        list.push({
+          id: d.id,
+          chapterId: data.chapterId ?? '',
+          type: data.type ?? 'posttest',
+          score: data.score ?? 0,
+          submittedAt: data.submittedAt ?? '',
+        });
+      });
+      setScores(list);
+    });
+    return () => unsub();
+  }, [user]);
+
+  return { scores, user };
+}
+
+// ── Save score to nilai subcollection ──
+export async function saveScore(
+  userId: string,
+  chapterId: string,
+  type: 'pretest' | 'posttest' | 'tugas' | 'pengayaan',
+  score: number
+) {
+  const docId = `${chapterId}-${type}`;
+  const ref = doc(db, 'users', userId, 'nilai', docId);
+  await setDoc(ref, {
+    chapterId,
+    type,
+    score,
+    submittedAt: new Date().toISOString(),
+  });
+}
+
+// ── Mark a chapter step as done (progress boolean only) ──
 export async function markChapterStep(
   userId: string,
   chapterId: string,
-  step: 'pretest' | 'materi' | 'tugas' | 'posttest',
-  score?: number
+  step: 'pretest' | 'materi' | 'tugas' | 'posttest'
 ) {
   const ref = doc(db, 'users', userId);
-
-  // Read current progress
   const userSnap = await getDoc(ref);
   const allProgress = userSnap.exists() ? (userSnap.data().progress || {}) : {};
   const current: ChapterProgressDetail = allProgress[chapterId]
     ? { ...DEFAULT_PROGRESS, ...allProgress[chapterId] }
     : { ...DEFAULT_PROGRESS };
 
-  // Apply step
   current[step] = true;
-  if (score !== undefined) {
-    if (step === 'pretest') current.pretestScore = score;
-    if (step === 'posttest') current.posttestScore = score;
-  }
-
-  // Auto-compute 'complete'
   current.complete =
     current.pretest === true &&
     current.materi === true &&
@@ -136,34 +167,63 @@ export async function markChapterStep(
   });
 }
 
-// ── Save pengayaan link ──
-export async function savePengayaanLink(userId: string, chapterId: string, link: string) {
-  const ref = doc(db, 'users', userId);
-  const userSnap = await getDoc(ref);
-  const allProgress = userSnap.exists() ? (userSnap.data().progress || {}) : {};
-  const current: ChapterProgressDetail = allProgress[chapterId]
-    ? { ...DEFAULT_PROGRESS, ...allProgress[chapterId] }
-    : { ...DEFAULT_PROGRESS };
+// ── Submit task answer to chapter doc ──
+export async function submitTaskAnswer(
+  chapterId: string,
+  taskId: string,
+  answer: TaskAnswer
+) {
+  const chapterRef = doc(db, 'materi', chapterId);
+  const snap = await getDoc(chapterRef);
+  if (!snap.exists()) return;
 
-  current.pengayaanLink = link;
-  await updateDoc(ref, {
-    [`progress.${chapterId}`]: current,
-  });
+  const data = snap.data();
+  const tasks = data.tasks || [];
+  const idx = tasks.findIndex((t: any) => t.id === taskId);
+  if (idx === -1) return;
+
+  // Add answer to the task's answer array
+  const existingAnswers = tasks[idx].answer || [];
+  // Remove previous submission from same user
+  const filtered = existingAnswers.filter((a: any) => a.userId !== answer.userId);
+  filtered.push(answer);
+  tasks[idx].answer = filtered;
+
+  await updateDoc(chapterRef, { tasks });
 }
 
-// ── Seed chapters (returns result for UI feedback) ──
+// ── Submit pengayaan link to chapter doc ──
+export async function submitPengayaanAnswer(
+  chapterId: string,
+  answer: PengayaanAnswer
+) {
+  const chapterRef = doc(db, 'materi', chapterId);
+  const snap = await getDoc(chapterRef);
+  if (!snap.exists()) return;
+
+  const data = snap.data();
+  const postTestOptional = data.postTestOptional;
+  if (!postTestOptional) return;
+
+  const existing = postTestOptional.answer || [];
+  const filtered = existing.filter((a: any) => a.userId !== answer.userId);
+  filtered.push(answer);
+  postTestOptional.answer = filtered;
+
+  await updateDoc(chapterRef, { postTestOptional });
+}
+
+// ── Seed chapters ──
 export async function seedChapters(): Promise<{ ok: boolean; message: string }> {
   try {
     const { CHAPTERS } = await import('./mock-data');
 
-    // Clear existing
     const existingSnap = await getDocs(collection(db, 'materi'));
     const deletions = existingSnap.docs.map(d =>
       setDoc(doc(db, 'materi', d.id), { _deleted: true, orderIndex: -1 })
     );
     await Promise.allSettled(deletions);
 
-    // Write fresh
     const writes = CHAPTERS.map((chapter: Chapter) => {
       const { id, ...data } = chapter;
       return setDoc(doc(db, 'materi', id), data);
@@ -187,28 +247,34 @@ export function computeTaskInbox(
     const prog = progress[chapter.id];
     if (!prog) continue;
     for (const task of chapter.tasks) {
+      const submitted = (task.answer || []).length;
       items.push({
         chapterId: chapter.id,
         chapterTitle: chapter.title,
         task,
-        status: prog.tugas ? 'submitted' : 'pending',
+        status: submitted > 0 ? 'submitted' : 'pending',
         score: null,
       });
     }
-    if (chapter.postTestOptional && prog.pengayaanLink) {
-      items.push({
-        chapterId: chapter.id,
-        chapterTitle: chapter.title,
-        task: {
-          id: `opt-${chapter.id}`,
-          title: 'Tugas Pengayaan: ' + chapter.title,
-          description: chapter.postTestOptional.instruction,
-          dueDate: null,
-          type: 'submission_link',
-        },
-        status: (prog.pengayaanScore ?? null) !== null ? 'graded' : 'submitted',
-        score: prog.pengayaanScore ?? null,
-      });
+    if (chapter.postTestOptional) {
+      const submitted = (chapter.postTestOptional.answer || []).length;
+      if (submitted > 0) {
+        items.push({
+          chapterId: chapter.id,
+          chapterTitle: chapter.title,
+          task: {
+            id: `opt-${chapter.id}`,
+            title: 'Tugas Pengayaan: ' + chapter.title,
+            description: chapter.postTestOptional.instruction,
+            dueDate: null,
+            type: 'mcq',
+            questions: [],
+            answer: [],
+          },
+          status: 'submitted',
+          score: null,
+        });
+      }
     }
   }
   return items;

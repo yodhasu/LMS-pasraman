@@ -1,7 +1,7 @@
 'use client';
 
 import { useAuth } from '@/lib/AuthContext';
-import { useChapters, useStudentProgress, computeTaskInbox, seedChapters } from '@/lib/firestore-data';
+import { useChapters, useStudentProgress, useNilai, computeTaskInbox, seedChapters } from '@/lib/firestore-data';
 import Link from 'next/link';
 import { useState } from 'react';
 
@@ -9,6 +9,7 @@ export default function DashboardPage() {
   const { user } = useAuth();
   const { chapters, loading: chLoading } = useChapters();
   const { progress } = useStudentProgress();
+  const { scores } = useNilai();
   const [seeding, setSeeding] = useState(false);
   const [seedMsg, setSeedMsg] = useState<string | null>(null);
 
@@ -201,17 +202,14 @@ export default function DashboardPage() {
 
       <div className="grid grid-cols-2 gap-3">
         {([
-          { label: 'Pre-Test', key: 'pretestScore' as const, color: 'bg-amber-50' },
-          { label: 'Post-Test', key: 'posttestScore' as const, color: 'bg-emerald-50' },
-          { label: 'Pengayaan', key: 'pengayaanScore' as const, color: 'bg-purple-50' },
-          { label: 'Tugas', key: 'pengayaanScore' as const, color: 'bg-blue-50' },
-        ]).map(({ label, key, color }) => {
-          const scored = chapters.filter(c => {
-            const v = progress[c.id]?.[key];
-            return v != null;
-          });
-          const avg = scored.length > 0
-            ? Math.round(scored.reduce((sum, c) => sum + (progress[c.id]?.[key] || 0), 0) / scored.length)
+          { label: 'Pre-Test', type: 'pretest' as const, color: 'bg-amber-50' },
+          { label: 'Post-Test', type: 'posttest' as const, color: 'bg-emerald-50' },
+          { label: 'Pengayaan', type: 'pengayaan' as const, color: 'bg-purple-50' },
+          { label: 'Tugas', type: 'tugas' as const, color: 'bg-blue-50' },
+        ]).map(({ label, type, color }) => {
+          const filtered = scores.filter(s => s.type === type);
+          const avg = filtered.length > 0
+            ? Math.round(filtered.reduce((sum, s) => sum + s.score, 0) / filtered.length)
             : '—';
           return (
             <Link key={label} href="/nilai" className={`rounded-2xl border border-[#1F3D30]/5 p-3 hover:border-[#1F3D30]/15 transition-colors ${typeof avg !== 'number' ? 'bg-white' : color}`}>

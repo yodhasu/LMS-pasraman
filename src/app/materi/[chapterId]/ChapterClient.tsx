@@ -2,12 +2,11 @@
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import ReactMarkdown from 'react-markdown';
-import { useChapters, useStudentProgress, markChapterStep, savePengayaanLink } from '@/lib/firestore-data';
+import { useChapters, useStudentProgress, useNilai, markChapterStep, saveScore, submitTaskAnswer, submitPengayaanAnswer } from '@/lib/firestore-data';
 import { useAuth } from '@/lib/AuthContext';
 import MCQTest from '@/components/MCQTest';
 import YouTubeEmbed from '@/components/YouTubeEmbed';
 import { useState } from 'react';
-
 import { ChapterProgressDetail } from '@/lib/types';
 
 function SectionCard({ step, title, description, done, unlocked, children }: {
@@ -45,16 +44,8 @@ export default function ChapterClient() {
   const isLocked = !!chapter && !prevCompleted;
 
   const prog: ChapterProgressDetail = chapter
-    ? (progress[chapterId] || {
-        pretest: false, pretestScore: null, materi: false, tugas: false,
-        posttest: false, posttestScore: null, complete: false,
-        pengayaanLink: null, pengayaanScore: null,
-      })
-    : {
-        pretest: false, pretestScore: null, materi: false, tugas: false,
-        posttest: false, posttestScore: null, complete: false,
-        pengayaanLink: null, pengayaanScore: null,
-      };
+    ? (progress[chapterId] || { pretest: false, materi: false, tugas: false, posttest: false, complete: false })
+    : { pretest: false, materi: false, tugas: false, posttest: false, complete: false };
 
   if (loading) {
     return (
@@ -104,35 +95,56 @@ export default function ChapterClient() {
     );
   }
 
-  // ── Computed from Firestore progress ──
   const hasPreTest = chapter.preTest && chapter.preTest.length > 0;
   const preTestStepDone = !hasPreTest || prog.pretest;
-  const materialStepDone = prog.materi || false;
-  const tugasDone = prog.tugas || false;
-  const tasksAllDone = chapter.tasks.length === 0 || tugasDone;
-  const postTestStepDone = prog.posttest || false;
-  const postTestUnlocked = materialStepDone && tasksAllDone;
+  const materialStepDone = prog.materi;
+  const tugasStepDone = chapter.tasks.length === 0 || prog.tugas;
+  const postTestStepDone = prog.posttest;
+  const postTestUnlocked = materialStepDone && tugasStepDone;
   const optionalUnlocked = postTestStepDone;
 
-  // ── Handlers: persist to Firestore ──
+  // ── Handlers ──
   const handlePreTestComplete = (score: number) => {
-    if (user) markChapterStep(user.uid, chapterId, 'pretest', score);
+    if (!user) return;
+    saveScore(user.uid, chapterId, 'pretest', score);
+    markChapterStep(user.uid, chapterId, 'pretest');
   };
 
   const handleMaterialDone = () => {
     if (user) markChapterStep(user.uid, chapterId, 'materi');
   };
 
-  const handleTasksDone = () => {
-    if (user) markChapterStep(user.uid, chapterId, 'tugas');
+  const handleTugasComplete = (score: number, answers: Record<string, number>) => {
+    if (!user || !chapter) return;
+    const task = chapter.tasks[0]; // assume 1 task per chapter
+    if (!task) return;
+    const answer = {
+      userId: user.uid,
+      userName: user.displayName || user.email?.split('@')[0] || 'Siswa',
+      score,
+      answers,
+      submittedAt: new Date().toISOString(),
+    };
+    saveScore(user.uid, chapterId, 'tugas', score);
+    submitTaskAnswer(chapterId, task.id, answer);
+    markChapterStep(user.uid, chapterId, 'tugas');
   };
 
   const handlePostTestComplete = (score: number) => {
-    if (user) markChapterStep(user.uid, chapterId, 'posttest', score);
+    if (!user) return;
+    saveScore(user.uid, chapterId, 'posttest', score);
+    markChapterStep(user.uid, chapterId, 'posttest');
   };
 
   const handlePengayaanSubmit = (link: string) => {
-    if (user) savePengayaanLink(user.uid, chapterId, link);
+    if (!user || !chapter?.postTestOptional) return;
+    const answer = {
+      userId: user.uid,
+      userName: user.displayName || user.email?.split('@')[0] || 'Siswa',
+      link,
+      submittedAt: new Date().toISOString(),
+    };
+    submitPengayaanAnswer(chapterId, answer);
   };
 
   return (
@@ -153,7 +165,7 @@ export default function ChapterClient() {
           {!preTestStepDone ? (
             <MCQTest questions={chapter.preTest!} type="pre" onComplete={handlePreTestComplete} />
           ) : (
-            <div className="ml-11 text-sm text-emerald-700 font-medium">✅ Pre-test selesai — Skor: {prog.pretestScore ?? '-'}</div>
+            <div className="ml-11 text-sm text-emerald-700 font-medium">✅ Pre-test selesai</div>
           )}
         </SectionCard>
       ) : (
@@ -177,25 +189,24 @@ export default function ChapterClient() {
         </div>
       </SectionCard>
 
-      {/* Tugas */}
+      {/* Tugas — now MCQ */}
       {chapter.tasks.length > 0 && (
-        <SectionCard step={hasPreTest ? 3 : 2} title="Tugas" description="Kerjakan tugas berikut untuk melanjutkan." done={tasksAllDone} unlocked={materialStepDone}>
+        <SectionCard step={hasPreTest ? 3 : 2} title="Tugas" description="Kerjakan soal-soal berikut." done={tugasStepDone} unlocked={materialStepDone}>
           <div className="ml-11 space-y-3">
-            {chapter.tasks.map((t: any) => (
-              <div key={t.id} className={`p-3 rounded-xl border ${tugasDone ? 'border-emerald-200 bg-emerald-50' : 'border-[#1F3D30]/5 bg-[#FBF8F4]'}`}>
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-semibold text-sm">{t.title}</p>
-                    <p className="text-xs text-[#5C7A6E] mt-0.5">{t.description}</p>
-                    {t.dueDate && <p className="text-xs font-medium text-[#C8A84E] mt-1">Deadline: {new Date(t.dueDate).toLocaleDateString('id-ID')}</p>}
-                  </div>
-                  {!tugasDone ? (
-                    <button onClick={handleTasksDone}
-                      className="px-3 py-1.5 bg-[#1F3D30] text-white rounded-lg text-xs font-semibold">Tandai Selesai</button>
-                  ) : (
-                    <span className="text-emerald-700 text-xs font-semibold">✓ Selesai</span>
-                  )}
+            {chapter.tasks.map((t) => (
+              <div key={t.id} className={`p-4 rounded-xl border ${tugasStepDone ? 'border-emerald-200' : 'border-[#1F3D30]/5 bg-[#FBF8F4]'}`}>
+                <div className="mb-3">
+                  <p className="font-semibold text-sm">{t.title}</p>
+                  <p className="text-xs text-[#5C7A6E] mt-0.5">{t.description}</p>
+                  {t.dueDate && <p className="text-xs font-medium text-[#C8A84E] mt-1">Deadline: {new Date(t.dueDate).toLocaleDateString('id-ID')}</p>}
                 </div>
+                {!tugasStepDone && t.questions && t.questions.length > 0 ? (
+                  <MCQTest questions={t.questions} type="tugas" onComplete={handleTugasComplete} />
+                ) : tugasStepDone ? (
+                  <p className="text-sm text-emerald-700 font-medium">✅ Tugas sudah dikerjakan</p>
+                ) : (
+                  <p className="text-sm text-[#8A9E95]">Belum ada soal tugas.</p>
+                )}
               </div>
             ))}
           </div>
@@ -209,8 +220,7 @@ export default function ChapterClient() {
           <MCQTest questions={chapter.postTestMandatory} type="post" onComplete={handlePostTestComplete} />
         ) : (
           <div className="ml-11 text-sm text-emerald-700 font-medium">
-            ✅ Post-test selesai — Skor: {prog.posttestScore ?? '-'}
-            {prog.complete && ' — Bab tuntas! 🎉'}
+            ✅ Post-test selesai{prog.complete && ' — Bab tuntas! 🎉'}
           </div>
         )}
       </SectionCard>
@@ -220,7 +230,6 @@ export default function ChapterClient() {
         <PengayaanSection
           step={hasPreTest ? (chapter.tasks.length > 0 ? 5 : 4) : (chapter.tasks.length > 0 ? 4 : 3)}
           chapter={chapter}
-          prog={prog}
           unlocked={optionalUnlocked}
           onSubmit={handlePengayaanSubmit}
         />
@@ -230,15 +239,15 @@ export default function ChapterClient() {
 }
 
 // ── Pengayaan sub-component ──
-function PengayaanSection({ step, chapter, prog, unlocked, onSubmit }: {
+function PengayaanSection({ step, chapter, unlocked, onSubmit }: {
   step: number;
   chapter: any;
-  prog: any;
   unlocked: boolean;
   onSubmit: (link: string) => void;
 }) {
-  const [link, setLink] = useState(prog.pengayaanLink || '');
-  const submitted = !!prog.pengayaanLink;
+  const [link, setLink] = useState('');
+  const answerCount = chapter.postTestOptional?.answer?.length || 0;
+  const submitted = answerCount > 0;
 
   return (
     <SectionCard step={step} title="Tugas Pengayaan (Opsional)"
