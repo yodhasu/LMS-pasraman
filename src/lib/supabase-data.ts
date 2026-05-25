@@ -5,6 +5,8 @@ import { User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { Chapter, ChapterProgressDetail, ScoreRecord, StudentProgressMap, TaskInboxItem } from '@/lib/types';
 
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!;
 const VALID_CHAPTER_IDS = ['bab-1', 'bab-2', 'bab-3', 'bab-4', 'bab-5', 'bab-6'];
 const DEFAULT_PROGRESS: ChapterProgressDetail = {
   pretest: false,
@@ -42,6 +44,53 @@ type PengayaanSubmissionRow = {
   submitted_at: string;
 };
 
+// Raw PostgREST response types (snake_case — API contract)
+type RawChapter = {
+  id: string;
+  order_index: number;
+  title: string;
+  subtitle: string | null;
+  description: string | null;
+  material_content: string | null;
+  material_video_url: string | null;
+  cover_emoji: string | null;
+  cover_color: string | null;
+  [key: string]: unknown;
+};
+
+type RawChapterTask = {
+  id: string;
+  chapter_id: string;
+  title: string;
+  description: string | null;
+  due_date: string | null;
+  task_order: number;
+  [key: string]: unknown;
+};
+
+type RawPrompt = {
+  chapter_id: string;
+  instruction: string;
+  [key: string]: unknown;
+};
+
+/** Fetch from Supabase REST API with anon key only — no Bearer token.
+ *  This avoids 401 errors when the auth token is expired but still
+ *  attached by supabase-js. Safe for tables with anon-accessible RLS. */
+async function anonFetch<T>(path: string): Promise<{ data: T[] | null; error: { message: string; status: number } | null }> {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+      headers: { apikey: SUPABASE_KEY, 'Content-Type': 'application/json' },
+    });
+    if (!res.ok) {
+      return { data: null, error: { message: `HTTP ${res.status}: ${res.statusText}`, status: res.status } };
+    }
+    return { data: await res.json(), error: null };
+  } catch (e) {
+    return { data: null, error: { message: e instanceof Error ? e.message : String(e), status: 0 } };
+  }
+}
+
 function toMCQ(row: QuestionRow) {
   return {
     id: row.id,
@@ -78,25 +127,60 @@ export function useChapters() {
 
     async function load() {
       setLoading(true);
-      const [chaptersRes, tasksRes, questionsRes, promptsRes, taskSubsRes, pengayaanSubsRes] = await Promise.all([
-        supabase.from('chapters').select('*').order('order_index'),
-        supabase.from('chapter_tasks').select('*').order('task_order'),
-        supabase.from('mcq_questions').select('*').order('question_order'),
-        supabase.from('pengayaan_prompts').select('*'),
-        supabase.from('task_submissions').select('*'),
-        supabase.from('pengayaan_submissions').select('*'),
+
+      // Phase 1: anon-accessible tables via raw fetch (no Bearer token).
+      // Using raw fetch avoids 401 when supabase-js attaches an expired Bearer.
+      const [chaptersRes, tasksRes, questionsRes, promptsRes] = await Promise.all([
+        anonFetch<RawChapter>('chapters?select=*&order=order_index.asc'),
+        anonFetch<RawChapterTask>('chapter_tasks?select=*&order=task_order.asc'),
+        anonFetch<QuestionRow>('mcq_questions?select=*&order=question_order.asc'),
+        anonFetch<RawPrompt>('pengayaan_prompts?select=*'),
       ]);
 
-      const error = chaptersRes.error || tasksRes.error || questionsRes.error || promptsRes.error || taskSubsRes.error || pengayaanSubsRes.error;
-      if (error) {
-        console.error('useChapters supabase error:', error);
+      // Critical tables must succeed — without them the app is unusable
+      if (chaptersRes.error) {
+        console.error('useChapters: chapters fetch failed', chaptersRes.error);
+        if (!cancelled) setLoading(false);
+        return;
+      }
+      if (tasksRes.error) {
+        console.error('useChapters: chapter_tasks fetch failed', tasksRes.error);
+        if (!cancelled) setLoading(false);
+        return;
+      }
+      if (questionsRes.error) {
+        console.error('useChapters: mcq_questions fetch failed', questionsRes.error);
+        if (!cancelled) setLoading(false);
+        return;
+      }
+      if (promptsRes.error) {
+        console.error('useChapters: pengayaan_prompts fetch failed', promptsRes.error);
         if (!cancelled) setLoading(false);
         return;
       }
 
+      // Phase 2: auth-dependent tables — fetched via supabase-js (supports auth).
+      // If these fail (401/403), chapters still load without submission data.
+      const [taskSubsRes, pengayaanSubsRes] = await Promise.all([
+        supabase.from('task_submissions').select('*'),
+        supabase.from('pengayaan_submissions').select('*'),
+      ]);
+
       const questions = (questionsRes.data ?? []) as QuestionRow[];
-      const taskSubs = (taskSubsRes.data ?? []) as TaskSubmissionRow[];
-      const pengayaanSubs = (pengayaanSubsRes.data ?? []) as PengayaanSubmissionRow[];
+      let taskSubs: TaskSubmissionRow[] = [];
+      let pengayaanSubs: PengayaanSubmissionRow[] = [];
+
+      if (taskSubsRes.error) {
+        console.warn('useChapters: task_submissions non-critical error:', taskSubsRes.error.message);
+      } else {
+        taskSubs = (taskSubsRes.data ?? []) as TaskSubmissionRow[];
+      }
+
+      if (pengayaanSubsRes.error) {
+        console.warn('useChapters: pengayaan_submissions non-critical error:', pengayaanSubsRes.error.message);
+      } else {
+        pengayaanSubs = (pengayaanSubsRes.data ?? []) as PengayaanSubmissionRow[];
+      }
 
       const list: Chapter[] = (chaptersRes.data ?? [])
         .filter((chapter) => VALID_CHAPTER_IDS.includes(chapter.id))
