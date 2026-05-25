@@ -22,31 +22,37 @@ export function useChapters() {
 
   useEffect(() => {
     const q = collection(db, 'materi');
-    const unsub = onSnapshot(q, (snap) => {
-      const list: Chapter[] = [];
-      snap.forEach((d) => {
-        if (!VALID_CHAPTER_IDS.includes(d.id)) return;
-        const data = d.data();
-        list.push({
-          id: d.id,
-          orderIndex: data.orderIndex ?? 0,
-          title: data.title ?? '',
-          subtitle: data.subtitle ?? '',
-          description: data.description ?? '',
-          materialContent: data.materialContent ?? '',
-          materialVideoUrl: data.materialVideoUrl ?? null,
-          preTest: data.preTest ?? null,
-          tasks: data.tasks ?? [],
-          postTestMandatory: data.postTestMandatory ?? [],
-          postTestOptional: data.postTestOptional ?? null,
-          coverEmoji: data.coverEmoji ?? '📖',
-          coverColor: data.coverColor ?? 'from-green-100 to-emerald-200',
+    const unsub = onSnapshot(q,
+      (snap) => {
+        const list: Chapter[] = [];
+        snap.forEach((d) => {
+          if (!VALID_CHAPTER_IDS.includes(d.id)) return;
+          const data = d.data();
+          list.push({
+            id: d.id,
+            orderIndex: data.orderIndex ?? 0,
+            title: data.title ?? '',
+            subtitle: data.subtitle ?? '',
+            description: data.description ?? '',
+            materialContent: data.materialContent ?? '',
+            materialVideoUrl: data.materialVideoUrl ?? null,
+            preTest: data.preTest ?? null,
+            tasks: Array.isArray(data.tasks) ? data.tasks : [],
+            postTestMandatory: Array.isArray(data.postTestMandatory) ? data.postTestMandatory : [],
+            postTestOptional: data.postTestOptional ?? null,
+            coverEmoji: data.coverEmoji ?? '📖',
+            coverColor: data.coverColor ?? 'from-green-100 to-emerald-200',
+          });
         });
-      });
-      list.sort((a, b) => a.orderIndex - b.orderIndex);
-      setChapters(list);
-      setLoading(false);
-    });
+        list.sort((a, b) => a.orderIndex - b.orderIndex);
+        setChapters(list);
+        setLoading(false);
+      },
+      (err) => {
+        console.error('useChapters onSnapshot error:', err);
+        setLoading(false);
+      }
+    );
     return () => unsub();
   }, []);
 
@@ -66,26 +72,31 @@ export function useStudentProgress() {
   useEffect(() => {
     if (!user) return;
     const ref = doc(db, 'users', user.uid);
-    const unsub = onSnapshot(ref, (snap) => {
-      if (snap.exists()) {
-        const data = snap.data();
-        const progressMap = data.progress || {};
-        const mapped: StudentProgressMap = {};
-        for (const chapterId of VALID_CHAPTER_IDS) {
-          const raw = progressMap[chapterId] || {};
-          mapped[chapterId] = {
-            pretest: raw.pretest === true,
-            materi: raw.materi === true,
-            tugas: raw.tugas === true,
-            posttest: raw.posttest === true,
-            complete: raw.complete === true,
-          };
+    const unsub = onSnapshot(ref,
+      (snap) => {
+        if (snap.exists()) {
+          const data = snap.data();
+          const progressMap = data.progress || {};
+          const mapped: StudentProgressMap = {};
+          for (const chapterId of VALID_CHAPTER_IDS) {
+            const raw = progressMap[chapterId] || {};
+            mapped[chapterId] = {
+              pretest: raw.pretest === true,
+              materi: raw.materi === true,
+              tugas: raw.tugas === true,
+              posttest: raw.posttest === true,
+              complete: raw.complete === true,
+            };
+          }
+          setProgress(mapped);
+        } else {
+          setProgress({});
         }
-        setProgress(mapped);
-      } else {
-        setProgress({});
+      },
+      (err) => {
+        console.error('useStudentProgress onSnapshot error:', err);
       }
-    });
+    );
     return () => unsub();
   }, [user]);
 
@@ -105,21 +116,26 @@ export function useNilai() {
   useEffect(() => {
     if (!user) return;
     const q = collection(db, 'users', user.uid, 'nilai');
-    const unsub = onSnapshot(q, (snap) => {
-      const list: ScoreRecord[] = [];
-      snap.forEach((d) => {
-        const data = d.data();
-        list.push({
-          id: d.id,
-          chapterId: data.chapterId ?? '',
-          type: data.type ?? 'posttest',
-          score: data.score ?? 0,
-          submittedAt: data.submittedAt ?? '',
+    const unsub = onSnapshot(q,
+      (snap) => {
+        const list: ScoreRecord[] = [];
+        snap.forEach((d) => {
+          const data = d.data();
+          list.push({
+            id: d.id,
+            chapterId: data.chapterId ?? '',
+            type: data.type ?? 'posttest',
+            score: data.score ?? 0,
+            submittedAt: data.submittedAt ?? '',
+          });
         });
-      });
-      list.sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
-      setScores(list);
-    });
+        list.sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
+        setScores(list);
+      },
+      (err) => {
+        console.error('useNilai onSnapshot error:', err);
+      }
+    );
     return () => unsub();
   }, [user]);
 
@@ -281,7 +297,8 @@ export function computeTaskInbox(
     if (!isUnlocked) continue;
 
     // Tasks
-    for (const task of chapter.tasks) {
+    const safeTasks = Array.isArray(chapter.tasks) ? chapter.tasks : [];
+    for (const task of safeTasks) {
       const myAnswer = task.answer?.find(a => a.userId === userId);
       items.push({
         chapterId: chapter.id,
