@@ -1,6 +1,6 @@
 'use client';
 
-import { useChapters, useStudentProgress, computeTaskInbox } from '@/lib/firestore-data';
+import { useChapters, useStudentProgress, computeTaskInbox } from '@/lib/supabase-data';
 import { useAuth } from '@/lib/AuthContext';
 import Link from 'next/link';
 

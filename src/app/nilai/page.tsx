@@ -1,6 +1,6 @@
 'use client';
 
-import { useChapters, useNilai } from '@/lib/firestore-data';
+import { useChapters, useNilai } from '@/lib/supabase-data';
 
 export default function NilaiPage() {
   const { chapters, loading } = useChapters();

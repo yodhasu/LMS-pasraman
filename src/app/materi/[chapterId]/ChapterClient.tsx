@@ -5,7 +5,7 @@ import ReactMarkdown from 'react-markdown';
 import {
   useChapters, useStudentProgress, markChapterStep,
   saveScore, submitTaskAnswer, submitPengayaanLink
-} from '@/lib/firestore-data';
+} from '@/lib/supabase-data';
 import { useAuth } from '@/lib/AuthContext';
 import MCQTest from '@/components/MCQTest';
 import YouTubeEmbed from '@/components/YouTubeEmbed';
