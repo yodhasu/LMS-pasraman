@@ -1,8 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { onAuthStateChanged, User } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
+import { User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { Chapter, ChapterProgressDetail, ScoreRecord, StudentProgressMap, TaskInboxItem } from '@/lib/types';
 
@@ -52,18 +51,22 @@ function toMCQ(row: QuestionRow) {
   };
 }
 
-async function ensureAppUser(user: User) {
-  const email = user.email ?? `${user.uid}@unknown.local`;
-  const { error } = await supabase
-    .from('app_users')
-    .upsert({
-      firebase_uid: user.uid,
-      email,
-      display_name: user.displayName ?? email.split('@')[0],
-      role: 'student',
-    }, { onConflict: 'firebase_uid' });
+function normalizeUser(user: User | null) {
+  if (!user) return null;
+  return {
+    id: user.id,
+    uid: user.id,
+    email: user.email ?? null,
+    displayName:
+      typeof user.user_metadata?.display_name === 'string' ? user.user_metadata.display_name :
+      typeof user.user_metadata?.full_name === 'string' ? user.user_metadata.full_name :
+      user.email?.split('@')[0] ?? null,
+  };
+}
 
-  if (error) console.error('ensureAppUser failed:', error);
+async function currentUser(): Promise<User | null> {
+  const { data } = await supabase.auth.getUser();
+  return data.user ?? null;
 }
 
 export function useChapters() {
@@ -171,20 +174,16 @@ export function useChapters() {
 
 export function useStudentProgress() {
   const [progress, setProgress] = useState<StudentProgressMap>({});
-  const [user, setUser] = useState<User | null>(null);
-
-  useEffect(() => onAuthStateChanged(auth, (u) => setUser(u)), []);
+  const [user, setUser] = useState<ReturnType<typeof normalizeUser>>(null);
 
   useEffect(() => {
-    if (!user) return;
     let cancelled = false;
 
-    async function load() {
-      await ensureAppUser(user!);
+    async function load(userId: string) {
       const { data, error } = await supabase
         .from('chapter_progress')
         .select('*')
-        .eq('user_id', user!.uid);
+        .eq('user_id', userId);
 
       if (error) {
         console.error('useStudentProgress supabase error:', error);
@@ -206,29 +205,41 @@ export function useStudentProgress() {
       if (!cancelled) setProgress(mapped);
     }
 
-    load();
-    return () => { cancelled = true; };
-  }, [user]);
+    supabase.auth.getUser().then(({ data }) => {
+      if (cancelled) return;
+      const normalized = normalizeUser(data.user ?? null);
+      setUser(normalized);
+      if (normalized) load(normalized.id);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      const normalized = normalizeUser(session?.user ?? null);
+      setUser(normalized);
+      setProgress({});
+      if (normalized) load(normalized.id);
+    });
+
+    return () => {
+      cancelled = true;
+      subscription.unsubscribe();
+    };
+  }, []);
 
   return { progress, user };
 }
 
 export function useNilai() {
   const [scores, setScores] = useState<ScoreRecord[]>([]);
-  const [user, setUser] = useState<User | null>(null);
-
-  useEffect(() => onAuthStateChanged(auth, (u) => setUser(u)), []);
+  const [user, setUser] = useState<ReturnType<typeof normalizeUser>>(null);
 
   useEffect(() => {
-    if (!user) return;
     let cancelled = false;
 
-    async function load() {
-      await ensureAppUser(user!);
+    async function load(userId: string) {
       const { data, error } = await supabase
         .from('scores')
         .select('*')
-        .eq('user_id', user!.uid)
+        .eq('user_id', userId)
         .order('submitted_at', { ascending: false });
 
       if (error) {
@@ -247,9 +258,25 @@ export function useNilai() {
       if (!cancelled) setScores(mapped);
     }
 
-    load();
-    return () => { cancelled = true; };
-  }, [user]);
+    supabase.auth.getUser().then(({ data }) => {
+      if (cancelled) return;
+      const normalized = normalizeUser(data.user ?? null);
+      setUser(normalized);
+      if (normalized) load(normalized.id);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      const normalized = normalizeUser(session?.user ?? null);
+      setUser(normalized);
+      setScores([]);
+      if (normalized) load(normalized.id);
+    });
+
+    return () => {
+      cancelled = true;
+      subscription.unsubscribe();
+    };
+  }, []);
 
   return { scores, user };
 }
@@ -260,9 +287,6 @@ export async function markChapterStep(
   step: 'pretest' | 'materi' | 'tugas' | 'posttest',
 ): Promise<boolean> {
   try {
-    const user = auth.currentUser;
-    if (user) await ensureAppUser(user);
-
     const { error } = await supabase
       .from('chapter_progress')
       .upsert({ user_id: userId, chapter_id: chapterId, [step]: true }, { onConflict: 'user_id,chapter_id' });
@@ -282,9 +306,6 @@ export async function saveScore(
   score: number,
 ): Promise<boolean> {
   try {
-    const user = auth.currentUser;
-    if (user) await ensureAppUser(user);
-
     const { error } = await supabase
       .from('scores')
       .upsert({ user_id: userId, chapter_id: chapterId, type, score, submitted_at: new Date().toISOString() }, { onConflict: 'user_id,chapter_id,type' });

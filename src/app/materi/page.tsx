@@ -1,6 +1,6 @@
 'use client';
 
-import { useChapters, useStudentProgress } from '@/lib/firestore-data';
+import { useChapters, useStudentProgress } from '@/lib/supabase-data';
 import Link from 'next/link';
 
 export default function MateriPage() {

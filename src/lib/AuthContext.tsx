@@ -1,27 +1,24 @@
 'use client';
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import {
-  onAuthStateChanged,
-  signInWithEmailAndPassword,
-  signInWithPopup,
-  GoogleAuthProvider,
-  linkWithPopup,
-  signOut as firebaseSignOut,
-  User,
-} from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { auth, db } from '@/lib/firebase';
+import { User } from '@supabase/supabase-js';
+import { supabase } from '@/lib/supabase';
+
+type AppRole = 'student' | 'teacher' | 'admin';
+
+export interface LmsUser {
+  id: string;
+  uid: string;
+  email: string | null;
+  displayName: string | null;
+}
 
 interface AuthContextType {
-  user: User | null;
-  role: 'student' | 'teacher' | null;
+  user: LmsUser | null;
+  role: AppRole | null;
   loading: boolean;
   signIn: (username: string, password: string) => Promise<void>;
-  signInWithGoogle: () => Promise<void>;
-  linkGoogle: () => Promise<void>;
   logout: () => Promise<void>;
-  hasGoogleLinked: boolean;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -29,82 +26,106 @@ const AuthContext = createContext<AuthContextType>({
   role: null,
   loading: true,
   signIn: async () => {},
-  signInWithGoogle: async () => {},
-  linkGoogle: async () => {},
   logout: async () => {},
-  hasGoogleLinked: false,
 });
 
+function normalizeUser(user: User | null): LmsUser | null {
+  if (!user) return null;
+  const displayName =
+    typeof user.user_metadata?.display_name === 'string' ? user.user_metadata.display_name :
+    typeof user.user_metadata?.full_name === 'string' ? user.user_metadata.full_name :
+    user.email?.split('@')[0] ?? null;
+
+  return {
+    id: user.id,
+    uid: user.id,
+    email: user.email ?? null,
+    displayName,
+  };
+}
+
+async function ensureAppUser(user: User): Promise<AppRole | null> {
+  const email = user.email ?? `${user.id}@unknown.local`;
+  const username = email.split('@')[0];
+  const displayName =
+    typeof user.user_metadata?.display_name === 'string' ? user.user_metadata.display_name :
+    typeof user.user_metadata?.full_name === 'string' ? user.user_metadata.full_name :
+    username;
+
+  const { data: existing, error: selectError } = await supabase
+    .from('app_users')
+    .select('role')
+    .eq('id', user.id)
+    .maybeSingle();
+
+  if (selectError) console.error('app_users select failed:', selectError);
+  if (existing?.role) return existing.role as AppRole;
+
+  const { data, error } = await supabase
+    .from('app_users')
+    .insert({
+      id: user.id,
+      email,
+      username,
+      display_name: displayName,
+      role: 'student',
+    })
+    .select('role')
+    .single();
+
+  if (error) {
+    console.error('app_users insert failed:', error);
+    return null;
+  }
+
+  return (data?.role as AppRole) ?? 'student';
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(() => auth.currentUser);
-  const [role, setRole] = useState<'student' | 'teacher' | null>(null);
+  const [user, setUser] = useState<LmsUser | null>(null);
+  const [role, setRole] = useState<AppRole | null>(null);
   const [loading, setLoading] = useState(true);
-  const [hasGoogleLinked, setHasGoogleLinked] = useState(false);
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
-      setUser(firebaseUser);
-      if (firebaseUser) {
-        // Check Google link
-        setHasGoogleLinked(
-          firebaseUser.providerData.some((p) => p.providerId === 'google.com')
-        );
+    let active = true;
 
-        // Get role from claims or Firestore
-        const token = await firebaseUser.getIdTokenResult();
-        let userRole = token.claims.role as string | undefined;
-        if (!userRole) {
-          const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
-          if (userDoc.exists()) userRole = userDoc.data().role;
-        }
-        setRole((userRole as 'student' | 'teacher') || null);
+    async function loadInitialSession() {
+      const { data } = await supabase.auth.getSession();
+      const supabaseUser = data.session?.user ?? null;
+      if (!active) return;
+      setUser(normalizeUser(supabaseUser));
+      setRole(supabaseUser ? await ensureAppUser(supabaseUser) : null);
+      if (active) setLoading(false);
+    }
 
-        // Ensure Firestore doc exists for ALL new users (not just Google-linked)
-        const userRef = doc(db, 'users', firebaseUser.uid);
-        const snap = await getDoc(userRef);
-        if (!snap.exists()) {
-          await setDoc(userRef, {
-            username: firebaseUser.email?.split('@')[0] || 'user',
-            displayName: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Siswa',
-            role: 'student',
-            googleLinked: firebaseUser.providerData.some((p) => p.providerId === 'google.com'),
-          });
-        }
-      } else {
-        setRole(null);
-        setHasGoogleLinked(false);
-      }
+    loadInitialSession();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      const supabaseUser = session?.user ?? null;
+      setUser(normalizeUser(supabaseUser));
+      setRole(supabaseUser ? await ensureAppUser(supabaseUser) : null);
       setLoading(false);
     });
-    return () => unsub();
+
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const signIn = async (username: string, password: string) => {
     const email = username.includes('@') ? username : `${username}@pasraman.id`;
-    await signInWithEmailAndPassword(auth, email, password);
-  };
-
-  const signInWithGoogle = async () => {
-    const provider = new GoogleAuthProvider();
-    await signInWithPopup(auth, provider);
-  };
-
-  const linkGoogle = async () => {
-    if (!user) return;
-    const provider = new GoogleAuthProvider();
-    await linkWithPopup(user, provider);
-    setHasGoogleLinked(true);
-    await setDoc(doc(db, 'users', user.uid), { googleLinked: true }, { merge: true });
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw error;
   };
 
   const logout = async () => {
-    await firebaseSignOut(auth);
+    const { error } = await supabase.auth.signOut();
+    if (error) throw error;
   };
 
   return (
-    <AuthContext.Provider
-      value={{ user, role, loading, signIn, signInWithGoogle, linkGoogle, logout, hasGoogleLinked }}
-    >
+    <AuthContext.Provider value={{ user, role, loading, signIn, logout }}>
       {children}
     </AuthContext.Provider>
   );

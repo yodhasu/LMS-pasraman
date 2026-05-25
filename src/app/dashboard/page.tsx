@@ -1,7 +1,7 @@
 'use client';
 
 import { useAuth } from '@/lib/AuthContext';
-import { useChapters, useStudentProgress, useNilai, computeTaskInbox, seedChapters } from '@/lib/firestore-data';
+import { useChapters, useStudentProgress, useNilai, computeTaskInbox, seedChapters } from '@/lib/supabase-data';
 import Link from 'next/link';
 import { useState } from 'react';
 
