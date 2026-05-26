@@ -6,6 +6,8 @@ export const STUDENT_INFO: StudentInfo = {
   semester: 'Genap 2025/2026',
 };
 
+/** @deprecated Materials now live in chapter_materials table. This array is only
+ *  used by the seed script for backward-compat chapter creation. */
 export const CHAPTERS: Chapter[] = [
   {
     id: 'bab-1',
@@ -13,30 +15,7 @@ export const CHAPTERS: Chapter[] = [
     title: 'Pengantar Susila Hindu',
     subtitle: 'Apa itu Susila dan mengapa penting?',
     description: 'Memahami konsep dasar Susila dalam Hindu: arti, sumber ajaran, dan penerapannya dalam kehidupan sehari-hari.',
-    materialContent: `## Apa itu Susila?
-
-Susila berasal dari bahasa Sanskerta: **Su** (baik) dan **Sila** (perilaku). Susila adalah ajaran tentang tingkah laku yang baik dan benar sesuai Dharma.
-
-### Mengapa Mempelajari Susila Penting?
-
-1. **Membentuk karakter mulia** — menuntun kita menjadi pribadi yang berakhlak
-2. **Hidup selaras dengan Dharma** — membedakan yang benar dan salah
-3. **Subha & Asubha Karma** — memahami bahwa setiap perbuatan berbuah
-
-### Sumber Ajaran Susila
-
-- **Weda Sruti** — wahyu suci yang didengar para Rsi
-- **Weda Smerti** — kitab hukum seperti Manawa Dharmasastra
-- **Itihasa** — Ramayana & Mahabharata (khususnya Bhagavad Gita)
-
-### Penerapan Sehari-hari
-
-Susila bukan hanya teori. Setiap hari kita dihadapkan pada pilihan:
-- Berkata jujur atau berbohong
-- Menolong teman atau bersikap acuh
-- Menghormati orang tua atau membantah
-
-Pilihan-pilihan kecil inilah yang membentuk karma kita.`,
+    materials: [],
     materialVideoUrl: null,
     preTest: [
       { id: 'pre1-1', question: 'Apa arti kata "Su" dalam Susila?', options: ['Kuat', 'Baik', 'Suci', 'Agung'], correctIndex: 1 },
@@ -79,45 +58,7 @@ Pilihan-pilihan kecil inilah yang membentuk karma kita.`,
     title: 'Tri Kaya Parisudha',
     subtitle: 'Tiga perbuatan yang harus disucikan',
     description: 'Mempelajari tiga jenis perbuatan suci: berpikir baik (Manacika), berkata baik (Wacika), dan berbuat baik (Kayika).',
-    materialContent: `## Tri Kaya Parisudha
-
-Tri Kaya Parisudha adalah **tiga perbuatan yang harus disucikan** dalam ajaran Hindu:
-
-### 1. Manacika — Berpikir yang Baik 🙏
-
-Pikiran adalah sumber segala perbuatan. **Apa yang kita pikirkan akan tercermin dalam ucapan dan tindakan.**
-
-- Selalu berpikir positif terhadap sesama
-- Menghindari iri hati, dengki, dan prasangka buruk
-- Mengisi pikiran dengan hal-hal yang bermanfaat
-
-> "Pikiran adalah pelopor, pikiran adalah pemimpin, segala sesuatu diciptakan oleh pikiran." — *Dhammapada*
-
-### 2. Wacika — Berkata yang Baik 🗣️
-
-Ucapan memiliki kekuatan besar. Kata-kata bisa menyembuhkan atau melukai.
-
-- Berkata jujur (*Satya*)
-- Berkata lembut dan sopan (*Priya*)
-- Berkata yang bermanfaat (*Hita*)
-- Menghindari fitnah, gosip, dan kata-kata kasar
-
-### 3. Kayika — Berbuat yang Baik 🤲
-
-Perbuatan nyata yang mencerminkan Dharma. Pikiran baik + ucapan baik harus diwujudkan dalam tindakan.
-
-- Menolong sesama tanpa pamrih
-- Menghormati orang tua dan guru
-- Menjaga kebersihan lingkungan
-- Rajin bersembahyang dan belajar
-
-### Penerapan Tri Kaya Parisudha
-
-| Aspek | Contoh Baik | Contoh Buruk |
-|-------|-------------|--------------|
-| Manacika | Memaafkan kesalahan teman | Mendendam |
-| Wacika | Memberi semangat pada teman | Mengejek |
-| Kayika | Membantu membersihkan pura | Merusak fasilitas umum |`,
+    materials: [],
     materialVideoUrl: null,
     preTest: [
       { id: 'pre2-1', question: 'Tri Kaya Parisudha terdiri dari berapa bagian?', options: ['2', '3', '4', '5'], correctIndex: 1 },
@@ -149,43 +90,9 @@ Perbuatan nyata yang mencerminkan Dharma. Pikiran baik + ucapan baik harus diwuj
     title: 'Subha & Asubha Karma',
     subtitle: 'Memahami hukum karma dalam kehidupan',
     description: 'Mengenal perbuatan baik (Subha Karma) dan buruk (Asubha Karma) serta hukum Karma Phala yang mengajarkan setiap perbuatan berbuah.',
-    materialContent: `## Subha Karma & Asubha Karma
-
-Dalam ajaran Hindu, setiap perbuatan akan mendatangkan hasil. Ini disebut **Karma Phala** — hukum sebab-akibat universal.
-
-### Subha Karma — Perbuatan Baik 🌸
-
-Perbuatan yang sesuai Dharma, menghasilkan karma baik (*Subha Karma Phala*):
-
-- Menghormati orang tua dan guru (*Guru Susrusa*)
-- Menjaga kebersihan dan melestarikan alam
-- Rajin belajar dan bersembahyang
-- Berkata jujur dan menolong sesama
-- Berdana punia (bersedekah)
-
-### Asubha Karma — Perbuatan Buruk ⚠️
-
-Perbuatan yang melanggar Dharma, menghasilkan karma buruk (*Asubha Karma Phala*):
-
-- Berbohong dan mencuri
-- Menyakiti makhluk hidup (*Himsa Karma*)
-- Malas belajar dan bermalas-malasan
-- Merusak alam dan lingkungan
-- Menghina dan merendahkan orang lain
-
-### Hukum Karma Phala 📜
-
-> **"Siapa menanam, dia menuai."**
-
-Hukum karma bukan hukuman, melainkan konsekuensi alami. Seperti menanam padi akan tumbuh padi, bukan jagung. Begitu pula perbuatan kita.
-
-### Tiga Jenis Karma Phala
-
-1. **Sancita Karma Phala** — hasil perbuatan masa lalu yang belum dinikmati
-2. **Prarabdha Karma Phala** — hasil perbuatan yang sedang dinikmati sekarang
-3. **Kriyamana Karma Phala** — hasil perbuatan yang akan dinikmati di masa depan`,
+    materials: [],
     materialVideoUrl: null,
-    preTest: null, // Guru tidak mengaktifkan pre-test untuk bab ini
+    preTest: null,
     tasks: [],
     postTestMandatory: [
       { id: 'post3-1', question: 'Subha Karma berarti?', options: ['Perbuatan buruk', 'Perbuatan baik', 'Perbuatan netral', 'Tidak berbuat'], correctIndex: 1 },
@@ -215,34 +122,7 @@ Hukum karma bukan hukuman, melainkan konsekuensi alami. Seperti menanam padi aka
     title: 'Tat Twam Asi',
     subtitle: 'Ajaran welas asih dalam Hindu',
     description: 'Memahami makna "Engkau adalah Aku" dari Chandogya Upanishad dan penerapannya dalam toleransi serta kepemimpinan.',
-    materialContent: `## Tat Twam Asi — Engkau adalah Aku
-
-**Tat Twam Asi** berasal dari *Chandogya Upanishad*, salah satu kitab suci Hindu. Secara harfiah berarti **"Itu adalah Kamu"** atau **"Engkau adalah Aku"**.
-
-### Makna Filosofis
-
-Semua makhluk pada hakikatnya adalah bagian dari **Brahman** (Tuhan Yang Maha Esa). Tidak ada perbedaan esensial antara aku, kamu, dan makhluk lain.
-
-Jika kita menyakiti orang lain, pada hakikatnya kita menyakiti diri sendiri. Jika kita menolong orang lain, kita menolong diri sendiri.
-
-### Penerapan Tat Twam Asi 🌏
-
-1. **Toleransi Beragama** — menghormati keyakinan orang lain
-2. **Anti Diskriminasi** — tidak membeda-bedakan berdasarkan suku, agama, ras
-3. **Empati** — merasakan penderitaan sesama dan terdorong menolong
-4. **Kerukunan** — menjaga kedamaian di sekolah, rumah, dan masyarakat
-
-### Ajaran Kepemimpinan dari Itihasa 👑
-
-#### Rama — Pemimpin yang Berkorban
-Dalam Ramayana, Rama rela meninggalkan istana dan hidup di hutan selama 14 tahun demi menepati janji ayahnya. Pemimpin sejati mengutamakan kebenaran di atas kenyamanan pribadi.
-
-#### Yudhistira — Pemimpin Dharma
-Dalam Mahabharata, Yudhistira memimpin dengan berpegang teguh pada Dharma. Ia tidak pernah berbohong dan selalu mengutamakan keadilan, bahkan di tengah perang.
-
-### Refleksi
-
-> "Jika kamu ingin orang lain memperlakukanmu dengan baik, perlakukanlah mereka dengan baik terlebih dahulu."`,
+    materials: [],
     materialVideoUrl: null,
     preTest: [
       { id: 'pre4-1', question: '"Tat Twam Asi" berasal dari kitab?', options: ['Bhagavad Gita', 'Chandogya Upanishad', 'Ramayana', 'Manawa Dharmasastra'], correctIndex: 1 },
@@ -281,57 +161,7 @@ Dalam Mahabharata, Yudhistira memimpin dengan berpegang teguh pada Dharma. Ia ti
     title: 'Catur Guru',
     subtitle: 'Empat guru dalam kehidupan',
     description: 'Mengenal empat guru yang wajib dihormati: Guru Rupaka (orang tua), Guru Pengajian (guru sekolah), Guru Wisesa (pemerintah), dan Guru Swadyaya (Tuhan).',
-    materialContent: `## Catur Guru — Empat Guru Kehidupan
-
-**Catur** berarti empat, **Guru** berarti yang patut dihormati. Catur Guru adalah ajaran tentang empat sosok yang wajib kita hormati dalam hidup.
-
----
-
-### 1. Guru Rupaka — Orang Tua 👨‍👩‍👧
-
-Orang tua adalah guru pertama dan utama. Mereka yang melahirkan, membesarkan, dan mendidik kita dengan penuh kasih sayang.
-
-**Kewajiban kita:**
-- Hormat dan patuh pada orang tua
-- Membantu pekerjaan rumah
-- Belajar dengan rajin — membanggakan mereka
-- Merawat mereka di masa tua
-
----
-
-### 2. Guru Pengajian — Guru Sekolah 📚
-
-Guru di sekolah yang memberikan ilmu pengetahuan dan membimbing kita menjadi manusia yang cerdas dan berkarakter.
-
-**Kewajiban kita:**
-- Menghormati dan mendengarkan guru
-- Mengerjakan tugas tepat waktu
-- Tidak menyontek atau berbuat curang
-- Menjaga nama baik sekolah
-
----
-
-### 3. Guru Wisesa — Pemerintah 🏛️
-
-Pemerintah dan pemimpin yang menciptakan ketertiban, keamanan, dan kesejahteraan masyarakat.
-
-**Kewajiban kita:**
-- Mematuhi peraturan yang berlaku
-- Membayar iuran sekolah tepat waktu
-- Ikut menjaga ketertiban lingkungan
-- Menggunakan fasilitas umum dengan baik
-
----
-
-### 4. Guru Swadyaya — Tuhan Yang Maha Esa 🌟
-
-Tuhan sebagai guru tertinggi, sumber segala pengetahuan dan kebijaksanaan.
-
-**Kewajiban kita:**
-- Rajin bersembahyang
-- Mempelajari kitab suci
-- Menjalankan ajaran Dharma
-- Percaya pada kekuasaan-Nya`,
+    materials: [],
     materialVideoUrl: null,
     preTest: null,
     tasks: [],
@@ -352,59 +182,7 @@ Tuhan sebagai guru tertinggi, sumber segala pengetahuan dan kebijaksanaan.
     title: 'Kepemimpinan Asta Brata',
     subtitle: 'Delapan sifat pemimpin ideal',
     description: 'Mempelajari delapan sifat kepemimpinan berdasarkan sifat-sifat Dewa: Indra, Yama, Surya, Candra, Bayu, Kuwera, Baruna, dan Agni.',
-    materialContent: `## Asta Brata — Delapan Sifat Kepemimpinan Hindu
-
-**Asta Brata** adalah ajaran kepemimpinan Hindu yang mengajarkan delapan sifat ideal seorang pemimpin. Ajaran ini disampaikan oleh Rama kepada Wibhisana setelah perang Ramayana usai.
-
-Masing-masing sifat diambil dari karakter Dewa:
-
----
-
-### 1. Indra Brata ☔ — Kemakmuran
-
-Seperti Dewa Indra yang menurunkan hujan untuk kesuburan, pemimpin harus **mensejahterakan rakyatnya**. Pemimpin yang baik memastikan semua orang di bawah tanggung jawabnya hidup layak.
-
----
-
-### 2. Yama Brata ⚖️ — Keadilan
-
-Seperti Dewa Yama yang adil menghakimi tanpa pandang bulu, pemimpin harus **adil dan tidak memihak**. Semua orang diperlakukan sama di depan aturan.
-
----
-
-### 3. Surya Brata ☀️ — Penerang
-
-Seperti Surya yang menerangi dunia tanpa pamrih, pemimpin harus menjadi **sumber pencerahan** — memberikan ilmu, bimbingan, dan inspirasi dengan ketulusan.
-
----
-
-### 4. Candra Brata 🌙 — Kesejukan
-
-Seperti bulan yang memberikan kesejukan di malam hari, pemimpin harus **menenangkan dan memberi harapan** di saat sulit.
-
----
-
-### 5. Bayu Brata 💨 — Ketegasan
-
-Seperti angin yang bisa halus namun juga bisa dahsyat, pemimpin harus bisa **lembut namun tegas** pada saat yang tepat.
-
----
-
-### 6. Kuwera Brata 💰 — Kemurahan Hati
-
-Seperti Kuwera (Dewa kekayaan) yang dermawan, pemimpin harus **murah hati** — tidak kikir dalam berbagi ilmu, waktu, dan bantuan.
-
----
-
-### 7. Baruna Brata 🌊 — Ketangguhan
-
-Seperti lautan yang luas dan tangguh, pemimpin harus **berwawasan luas dan tidak mudah goyah** menghadapi masalah.
-
----
-
-### 8. Agni Brata 🔥 — Semangat Membara
-
-Seperti api yang membakar habis dan tidak bisa ditipu oleh apapun, pemimpin harus **bersemangat, jujur, dan tidak korupsi**. Api juga membersihkan — pemimpin membersihkan dari keburukan.`,
+    materials: [],
     materialVideoUrl: null,
     preTest: null,
     tasks: [

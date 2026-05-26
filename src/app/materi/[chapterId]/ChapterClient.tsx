@@ -3,12 +3,12 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import ReactMarkdown from 'react-markdown';
 import {
-  useChapters, useStudentProgress, markChapterStep,
+  useChapters, useChapterMaterials, useStudentProgress, markChapterStep,
   saveScore, submitTaskAnswer, submitPengayaanLink
 } from '@/lib/supabase-data';
 import { useAuth } from '@/lib/AuthContext';
 import MCQTest from '@/components/MCQTest';
-import YouTubeEmbed from '@/components/YouTubeEmbed';
+import ChapterContent from '@/components/ChapterContent';
 import { useState } from 'react';
 import { ChapterProgressDetail, Chapter } from '@/lib/types';
 
@@ -43,6 +43,7 @@ export default function ChapterClient() {
   const chapterId = params.chapterId as string;
   const { chapters, loading } = useChapters();
   const { progress, user } = useStudentProgress();
+  const { materials, matProgress, loading: matLoading } = useChapterMaterials(chapterId);
 
   const chapter = chapters.find(c => c.id === chapterId);
   const cIdx = chapter ? chapters.findIndex(c => c.id === chapterId) : -1;
@@ -177,19 +178,12 @@ export default function ChapterClient() {
 
       {/* Materi */}
       <SectionCard step={hasPreTest ? 2 : 1} title="Materi" description="Pelajari materi bab ini dengan saksama." done={materialStepDone} unlocked={preTestStepDone}>
-        <div className="ml-11 space-y-4">
-          {chapter.materialVideoUrl && <YouTubeEmbed url={chapter.materialVideoUrl} />}
-          <div className="p-4 bg-[#FBF8F4] rounded-xl border border-[#1F3D30]/5">
-            <ReactMarkdown>{chapter.materialContent}</ReactMarkdown>
-          </div>
-          {!materialStepDone && (
-            <button onClick={handleMaterialDone}
-              className="px-4 py-2 bg-[#1F3D30] text-white rounded-xl text-sm font-semibold hover:bg-[#2A5A44] transition-colors">
-              ✓ Saya sudah membaca materi
-            </button>
-          )}
-          {materialStepDone && <p className="text-sm text-emerald-700 font-medium">✅ Materi sudah dibaca</p>}
-        </div>
+        <ChapterContent
+          materials={materials}
+          matProgress={matProgress}
+          materialStepDone={materialStepDone}
+          onMaterialDone={handleMaterialDone}
+        />
       </SectionCard>
 
       {/* Tugas — now MCQ! */}

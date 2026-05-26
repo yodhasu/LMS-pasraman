@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react';
 import { User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
-import { Chapter, ChapterProgressDetail, ScoreRecord, StudentProgressMap, TaskInboxItem } from '@/lib/types';
+import { Chapter, ChapterMaterial, ChapterProgressDetail, MaterialProgressMap, ScoreRecord, StudentProgressMap, TaskInboxItem } from '@/lib/types';
+import { CHAPTERS } from './mock-data';
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!;
@@ -216,7 +217,7 @@ export function useChapters() {
             title: chapter.title,
             subtitle: chapter.subtitle ?? '',
             description: chapter.description ?? '',
-            materialContent: chapter.material_content ?? '',
+            materials: [], // loaded separately via useChapterMaterials
             materialVideoUrl: chapter.material_video_url,
             coverEmoji: chapter.cover_emoji ?? '📖',
             coverColor: chapter.cover_color ?? 'from-green-100 to-emerald-200',
@@ -310,6 +311,105 @@ export function useStudentProgress() {
   }, []);
 
   return { progress, user };
+}
+
+type RawChapterMaterial = {
+  id: string;
+  chapter_id: string;
+  section_order: number;
+  type: string;
+  content: string;
+  caption: string | null;
+};
+
+type RawMaterialProgress = {
+  material_id: string;
+  viewed: boolean;
+  viewed_at: string | null;
+};
+
+export function useChapterMaterials(chapterId: string | null) {
+  const [materials, setMaterials] = useState<ChapterMaterial[]>([]);
+  const [matProgress, setMatProgress] = useState<MaterialProgressMap>({});
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!chapterId) { setLoading(false); return; }
+    let cancelled = false;
+
+    async function load(userId: string | null) {
+      setLoading(true);
+      const [matRes, progRes] = await Promise.all([
+        supabase
+          .from('chapter_materials')
+          .select('*')
+          .eq('chapter_id', chapterId)
+          .order('section_order', { ascending: true }),
+        userId
+          ? supabase.from('material_progress').select('*').eq('user_id', userId)
+          : Promise.resolve({ data: null, error: null }),
+      ]);
+
+      if (cancelled) return;
+
+      const list: ChapterMaterial[] = [];
+      if (matRes.error) {
+        console.error('useChapterMaterials: chapter_materials fetch failed', matRes.error);
+      } else {
+        for (const r of (matRes.data ?? []) as RawChapterMaterial[]) {
+          list.push({
+            id: r.id,
+            chapterId: r.chapter_id,
+            sectionOrder: r.section_order,
+            type: r.type as ChapterMaterial['type'],
+            content: r.content,
+            caption: r.caption,
+          });
+        }
+      }
+      setMaterials(list);
+
+      const progMap: MaterialProgressMap = {};
+      if (progRes && !progRes.error && progRes.data) {
+        for (const row of progRes.data as RawMaterialProgress[]) {
+          progMap[row.material_id] = { viewed: row.viewed, viewedAt: row.viewed_at };
+        }
+      }
+      setMatProgress(progMap);
+      setLoading(false);
+    }
+
+    supabase.auth.getUser().then(({ data }) => {
+      if (!cancelled) load(data.user?.id ?? null);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!cancelled) load(session?.user?.id ?? null);
+    });
+
+    return () => { cancelled = true; subscription.unsubscribe(); };
+  }, [chapterId]);
+
+  return { materials, matProgress, loading };
+}
+
+export async function markMaterialViewed(
+  userId: string,
+  materialId: string,
+): Promise<boolean> {
+  try {
+    const { error } = await supabase
+      .from('material_progress')
+      .upsert(
+        { user_id: userId, material_id: materialId, viewed: true, viewed_at: new Date().toISOString() },
+        { onConflict: 'user_id,material_id' }
+      );
+    if (error) throw error;
+    return true;
+  } catch (err) {
+    console.error('markMaterialViewed failed:', err);
+    return false;
+  }
 }
 
 export function useNilai() {
@@ -453,7 +553,33 @@ export async function submitPengayaanLink(
 }
 
 export async function seedChapters(): Promise<{ ok: boolean; message: string }> {
-  return { ok: false, message: 'Seed Supabase content via scripts/seed-supabase-content.cjs from the terminal.' };
+  try {
+    // Try seeding via supabase-js — works if user has teacher/admin role
+    const { error: deleteErr } = await supabase.from('chapters').delete().neq('id', '');
+    if (deleteErr) throw deleteErr;
+
+    const { error: insertErr } = await supabase.from('chapters').insert(
+      CHAPTERS.map(ch => ({
+        id: ch.id,
+        order_index: ch.orderIndex,
+        title: ch.title,
+        subtitle: ch.subtitle,
+        description: ch.description,
+        material_content: '',
+        material_video_url: ch.materialVideoUrl,
+        cover_emoji: ch.coverEmoji,
+        cover_color: ch.coverColor,
+      }))
+    );
+    if (insertErr) throw insertErr;
+
+    return { ok: true, message: '✅ Data berhasil di-reset!' };
+  } catch {
+    return {
+      ok: false,
+      message: '⚠️ Reset dari UI hanya untuk guru/admin. Jalankan: cd LMS-pasraman && env $(grep -v \'^#\' .env.local | xargs) node scripts/seed-supabase-content.cjs',
+    };
+  }
 }
 
 export function computeTaskInbox(

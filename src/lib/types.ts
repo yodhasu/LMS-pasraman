@@ -34,14 +34,31 @@ export interface ChapterTask {
   answer: TaskAnswer[]; // student submissions
 }
 
+// ── Structured chapter materials (replaces monolithic materialContent) ──
+export interface ChapterMaterial {
+  id: string;
+  chapterId: string;
+  sectionOrder: number;
+  type: 'text' | 'image' | 'video' | 'embed';
+  content: string;    // markdown for 'text', URL for 'image'/'video'/'embed'
+  caption: string | null;
+}
+
+export interface MaterialProgressMap {
+  [materialId: string]: {
+    viewed: boolean;
+    viewedAt: string | null;
+  };
+}
+
 export interface Chapter {
   id: string;
   orderIndex: number;
   title: string;
   subtitle: string;
   description: string;
-  materialContent: string;
-  materialVideoUrl: string | null;
+  materials: ChapterMaterial[];        // structured content sections
+  materialVideoUrl: string | null;     // kept for backward compat
   preTest: MCQ[] | null;
   tasks: ChapterTask[];
   postTestMandatory: MCQ[];
