@@ -250,12 +250,15 @@ function PengayaanSection({ step, chapterId, postTestOptional, unlocked, user, d
   displayName: string;
 }) {
   const myAnswer = user ? postTestOptional.answer?.find((a: any) => a.userId === user.uid) : null;
-  const submitted = !!myAnswer;
+  const [submittedLocally, setSubmittedLocally] = useState(false);
+  const submitted = !!myAnswer || submittedLocally;
   const [link, setLink] = useState('');
 
   const handleSubmit = async () => {
     if (!user || !link) return;
     await submitPengayaanLink(chapterId, user.uid, displayName, link);
+    setSubmittedLocally(true);
+    setLink('');
   };
 
   return (
