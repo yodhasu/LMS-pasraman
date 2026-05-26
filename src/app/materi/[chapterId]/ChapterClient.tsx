@@ -121,8 +121,10 @@ export default function ChapterClient() {
     }
   };
 
-  const handleMaterialDone = () => {
-    if (user) markChapterStep(user.uid, chapterId, 'materi');
+  const handleMaterialDone = async () => {
+    if (!user) return;
+    await markChapterStep(user.uid, chapterId, 'materi');
+    window.location.reload();
   };
 
   const handleTugasComplete = (taskIdx: number) => async (score: number, answers: Record<string, number>) => {
