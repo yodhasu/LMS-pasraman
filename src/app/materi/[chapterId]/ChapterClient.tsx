@@ -42,7 +42,7 @@ export default function ChapterClient() {
   const params = useParams();
   const chapterId = params.chapterId as string;
   const { chapters, loading } = useChapters();
-  const { progress, user } = useStudentProgress();
+  const { progress, user, refreshProgress } = useStudentProgress();
   const { materials, matProgress, loading: matLoading } = useChapterMaterials(chapterId);
 
   const chapter = chapters.find(c => c.id === chapterId);
@@ -114,17 +114,18 @@ export default function ChapterClient() {
   const displayName = user?.displayName || user?.email?.split('@')[0] || 'Siswa';
 
   // ── Handlers ──
-  const handlePreTestComplete = (score: number, _answers: Record<string, number>) => {
+  const handlePreTestComplete = async (score: number, _answers: Record<string, number>) => {
     if (user) {
-      markChapterStep(user.uid, chapterId, 'pretest');
-      saveScore(user.uid, chapterId, 'pretest', score);
+      await markChapterStep(user.uid, chapterId, 'pretest');
+      await saveScore(user.uid, chapterId, 'pretest', score);
+      refreshProgress(user.uid);
     }
   };
 
   const handleMaterialDone = async () => {
     if (!user) return;
     await markChapterStep(user.uid, chapterId, 'materi');
-    window.location.reload();
+    refreshProgress(user.uid);
   };
 
   const handleTugasComplete = (taskIdx: number) => async (score: number, answers: Record<string, number>) => {
@@ -143,13 +144,15 @@ export default function ChapterClient() {
       if (!hasPendingTasks || chapter.tasks.length === 1) {
         await markChapterStep(user.uid, chapterId, 'tugas');
       }
+      refreshProgress(user.uid);
     }
   };
 
-  const handlePostTestComplete = (score: number, _answers: Record<string, number>) => {
+  const handlePostTestComplete = async (score: number, _answers: Record<string, number>) => {
     if (user) {
-      markChapterStep(user.uid, chapterId, 'posttest');
-      saveScore(user.uid, chapterId, 'posttest', score);
+      await markChapterStep(user.uid, chapterId, 'posttest');
+      await saveScore(user.uid, chapterId, 'posttest', score);
+      refreshProgress(user.uid);
     }
   };
 

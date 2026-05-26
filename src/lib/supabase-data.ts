@@ -261,34 +261,34 @@ export function useStudentProgress() {
   const [progress, setProgress] = useState<StudentProgressMap>({});
   const [user, setUser] = useState<ReturnType<typeof normalizeUser>>(null);
 
+  async function load(userId: string) {
+    const { data, error } = await supabase
+      .from('chapter_progress')
+      .select('*')
+      .eq('user_id', userId);
+
+    if (error) {
+      console.error('useStudentProgress supabase error:', error);
+      return;
+    }
+
+    const mapped: StudentProgressMap = {};
+    for (const chapterId of VALID_CHAPTER_IDS) {
+      const row = data?.find((item) => item.chapter_id === chapterId);
+      mapped[chapterId] = row ? {
+        pretest: row.pretest === true,
+        materi: row.materi === true,
+        tugas: row.tugas === true,
+        posttest: row.posttest === true,
+        complete: row.complete === true,
+      } : { ...DEFAULT_PROGRESS };
+    }
+
+    setProgress(mapped);
+  }
+
   useEffect(() => {
     let cancelled = false;
-
-    async function load(userId: string) {
-      const { data, error } = await supabase
-        .from('chapter_progress')
-        .select('*')
-        .eq('user_id', userId);
-
-      if (error) {
-        console.error('useStudentProgress supabase error:', error);
-        return;
-      }
-
-      const mapped: StudentProgressMap = {};
-      for (const chapterId of VALID_CHAPTER_IDS) {
-        const row = data?.find((item) => item.chapter_id === chapterId);
-        mapped[chapterId] = row ? {
-          pretest: row.pretest === true,
-          materi: row.materi === true,
-          tugas: row.tugas === true,
-          posttest: row.posttest === true,
-          complete: row.complete === true,
-        } : { ...DEFAULT_PROGRESS };
-      }
-
-      if (!cancelled) setProgress(mapped);
-    }
 
     supabase.auth.getUser().then(({ data }) => {
       if (cancelled) return;
@@ -310,7 +310,7 @@ export function useStudentProgress() {
     };
   }, []);
 
-  return { progress, user };
+  return { progress, user, refreshProgress: load };
 }
 
 type RawChapterMaterial = {
