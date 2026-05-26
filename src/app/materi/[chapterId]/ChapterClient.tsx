@@ -10,7 +10,8 @@ import { useAuth } from '@/lib/AuthContext';
 import MCQTest from '@/components/MCQTest';
 import ChapterContent from '@/components/ChapterContent';
 import { useState } from 'react';
-import { ChapterProgressDetail, Chapter } from '@/lib/types';
+import { ChapterProgressDetail, Chapter, MCQ } from '@/lib/types';
+import MCQResult from '@/components/MCQResult';
 
 function SectionCard({ step, title, description, done, unlocked, children }: {
   step: number; title: string; description: string; done: boolean; unlocked: boolean; children?: React.ReactNode;
@@ -113,9 +114,17 @@ export default function ChapterClient() {
   const optionalUnlocked = postTestStepDone;
   const displayName = user?.displayName || user?.email?.split('@')[0] || 'Siswa';
 
+  // ── Test result review state (keeps results visible after completion) ──
+  const [pretestResult, setPretestResult] = useState<{ score: number; answers: Record<string, number> } | null>(null);
+  const [posttestResult, setPosttestResult] = useState<{ score: number; answers: Record<string, number> } | null>(null);
+  const [showPretestDetails, setShowPretestDetails] = useState(false);
+  const [showPosttestDetails, setShowPosttestDetails] = useState(false);
+
   // ── Handlers ──
-  const handlePreTestComplete = async (score: number, _answers: Record<string, number>) => {
+  const handlePreTestComplete = async (score: number, answers: Record<string, number>) => {
     if (user) {
+      setPretestResult({ score, answers });
+      setShowPretestDetails(true);
       await markChapterStep(user.uid, chapterId, 'pretest');
       await saveScore(user.uid, chapterId, 'pretest', score);
       refreshProgress(user.uid);
@@ -148,8 +157,10 @@ export default function ChapterClient() {
     }
   };
 
-  const handlePostTestComplete = async (score: number, _answers: Record<string, number>) => {
+  const handlePostTestComplete = async (score: number, answers: Record<string, number>) => {
     if (user) {
+      setPosttestResult({ score, answers });
+      setShowPosttestDetails(true);
       await markChapterStep(user.uid, chapterId, 'posttest');
       await saveScore(user.uid, chapterId, 'posttest', score);
       refreshProgress(user.uid);
@@ -171,7 +182,9 @@ export default function ChapterClient() {
       {/* Pre-test */}
       {hasPreTest ? (
         <SectionCard step={1} title="Pre-Test" description="Kerjakan pre-test untuk mengukur pemahaman awal." done={preTestStepDone} unlocked={true}>
-          {!preTestStepDone ? (
+          {pretestResult ? (
+            <MCQResult type="pre" score={pretestResult.score} answers={pretestResult.answers} questions={chapter.preTest!} />
+          ) : !preTestStepDone ? (
             <MCQTest questions={chapter.preTest!} type="pre" onComplete={handlePreTestComplete} />
           ) : (
             <div className="ml-11 text-sm text-emerald-700 font-medium">✅ Pre-test selesai</div>
@@ -216,7 +229,9 @@ export default function ChapterClient() {
       {/* Post-test Wajib */}
       <SectionCard step={hasPreTest ? (chapter.tasks.length > 0 ? 4 : 3) : (chapter.tasks.length > 0 ? 3 : 2)}
         title="Post-Test Wajib" description="Kerjakan post-test untuk menyelesaikan bab." done={postTestStepDone} unlocked={postTestUnlocked}>
-        {!postTestStepDone ? (
+        {posttestResult ? (
+          <MCQResult type="post" score={posttestResult.score} answers={posttestResult.answers} questions={chapter.postTestMandatory} />
+        ) : !postTestStepDone ? (
           <MCQTest questions={chapter.postTestMandatory} type="post" onComplete={handlePostTestComplete} />
         ) : (
           <div className="ml-11 text-sm text-emerald-700 font-medium">

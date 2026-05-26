@@ -29,6 +29,15 @@ export default function MCQTest({ questions, type = 'post', onComplete }: Props)
   const isTugas = type === 'tugas';
 
   if (submitted && score !== null) {
+    // For pre/post test, MCQResult handles the display — just show a brief confirmation
+    if (isPre || type === 'post') {
+      return (
+        <div className="ml-11 text-sm text-emerald-700 font-medium">
+          ✅ Mengirim jawaban...
+        </div>
+      );
+    }
+
     const passed = score >= 70;
     return (
       <div className={`p-5 rounded-2xl border-2 ${passed ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}`}>
