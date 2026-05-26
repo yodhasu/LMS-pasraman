@@ -38,10 +38,14 @@ export default function DashboardPage() {
   const pendingTasks = inbox.filter(i => i.status === 'pending');
 
   const steps = currentChapter ? [
-    { label: 'Pre-Test', done: currentProgress?.pretest || !currentChapter.preTest },
-    { label: 'Materi', done: currentProgress?.materi },
-    { label: 'Tugas', done: currentChapter.tasks.length === 0 || (currentProgress?.tugas ?? false) },
-    { label: 'Post-Test Wajib', done: currentProgress?.posttest },
+    ...(currentChapter.preTest && currentChapter.preTest.length > 0
+      ? [{ label: 'Pre-Test', done: currentProgress?.pretest ?? false }]
+      : []),
+    { label: 'Materi', done: currentProgress?.materi ?? false },
+    ...(currentChapter.tasks.length > 0
+      ? [{ label: 'Tugas', done: currentProgress?.tugas ?? false }]
+      : []),
+    { label: 'Post-Test', done: currentProgress?.posttest ?? false },
   ] : [];
 
   const displayName = user?.displayName || user?.email?.split('@')[0] || 'Siswa';
@@ -176,18 +180,14 @@ export default function DashboardPage() {
                 <span className="text-4xl">{currentChapter.coverEmoji}</span>
               </div>
               <div className="flex gap-2 mt-4 flex-wrap">
-                {steps.map((s, i) => {
-                  const isSkipped = s.label === 'Pre-Test' && !currentChapter.preTest;
-                  return (
-                    <div key={s.label} className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium ${
-                      isSkipped ? 'bg-gray-50 text-gray-400 line-through' :
-                      s.done ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
-                    }`}>
-                      <span>{isSkipped ? '—' : s.done ? '✓' : i + 1}</span>
-                      <span>{isSkipped ? 'Tanpa Pre-Test' : s.label}</span>
-                    </div>
-                  );
-                })}
+                {steps.map((s) => (
+                  <div key={s.label} className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium ${
+                    s.done ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
+                  }`}>
+                    <span>{s.done ? '✓' : '○'}</span>
+                    <span>{s.label}</span>
+                  </div>
+                ))}
               </div>
               <Link href={`/materi/${currentChapter.id}`}
                 className="mt-4 block w-full text-center py-2.5 bg-[#1F3D30] text-white rounded-xl text-sm font-semibold hover:bg-[#2A4D3E] transition-colors">
