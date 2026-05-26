@@ -10,7 +10,7 @@ import { useAuth } from '@/lib/AuthContext';
 import MCQTest from '@/components/MCQTest';
 import ChapterContent from '@/components/ChapterContent';
 import { useState } from 'react';
-import { ChapterProgressDetail, Chapter, MCQ } from '@/lib/types';
+import { ChapterProgressDetail, Chapter } from '@/lib/types';
 import MCQResult from '@/components/MCQResult';
 
 function SectionCard({ step, title, description, done, unlocked, children }: {
@@ -45,6 +45,8 @@ export default function ChapterClient() {
   const { chapters, loading } = useChapters();
   const { progress, user, refreshProgress } = useStudentProgress();
   const { materials, matProgress, loading: matLoading } = useChapterMaterials(chapterId);
+  const [pretestResult, setPretestResult] = useState<{ score: number; answers: Record<string, number> } | null>(null);
+  const [posttestResult, setPosttestResult] = useState<{ score: number; answers: Record<string, number> } | null>(null);
 
   const chapter = chapters.find(c => c.id === chapterId);
   const cIdx = chapter ? chapters.findIndex(c => c.id === chapterId) : -1;
@@ -114,17 +116,10 @@ export default function ChapterClient() {
   const optionalUnlocked = postTestStepDone;
   const displayName = user?.displayName || user?.email?.split('@')[0] || 'Siswa';
 
-  // ── Test result review state (keeps results visible after completion) ──
-  const [pretestResult, setPretestResult] = useState<{ score: number; answers: Record<string, number> } | null>(null);
-  const [posttestResult, setPosttestResult] = useState<{ score: number; answers: Record<string, number> } | null>(null);
-  const [showPretestDetails, setShowPretestDetails] = useState(false);
-  const [showPosttestDetails, setShowPosttestDetails] = useState(false);
-
   // ── Handlers ──
   const handlePreTestComplete = async (score: number, answers: Record<string, number>) => {
     if (user) {
       setPretestResult({ score, answers });
-      setShowPretestDetails(true);
       await markChapterStep(user.uid, chapterId, 'pretest');
       await saveScore(user.uid, chapterId, 'pretest', score);
       refreshProgress(user.uid);
@@ -142,14 +137,10 @@ export default function ChapterClient() {
       await submitTaskAnswer(chapterId, taskIdx, user.uid, displayName, answers, score);
       await saveScore(user.uid, chapterId, 'tugas', score);
 
-      // Mark tugas step done if this was the last pending task
-      // (for single-task chapters this is always true; for multi-task we check all)
       const hasPendingTasks = chapter.tasks.some((task) => {
         const submitted = (task.answer || []).some(a => a.userId === user.uid);
         return !submitted;
       });
-      // Since arrayUnion is async, the task we just submitted to may not show
-      // our answer yet in the snapshot — treat it as submitted optimistically
       if (!hasPendingTasks || chapter.tasks.length === 1) {
         await markChapterStep(user.uid, chapterId, 'tugas');
       }
@@ -160,7 +151,6 @@ export default function ChapterClient() {
   const handlePostTestComplete = async (score: number, answers: Record<string, number>) => {
     if (user) {
       setPosttestResult({ score, answers });
-      setShowPosttestDetails(true);
       await markChapterStep(user.uid, chapterId, 'posttest');
       await saveScore(user.uid, chapterId, 'posttest', score);
       refreshProgress(user.uid);
