@@ -552,6 +552,20 @@ export async function submitPengayaanLink(
   }
 }
 
+export async function resetUserProgress(userId: string): Promise<{ ok: boolean; message: string }> {
+  try {
+    const tables = ['chapter_progress', 'scores', 'task_submissions', 'pengayaan_submissions', 'material_progress'] as const;
+    for (const table of tables) {
+      const { error } = await supabase.from(table).delete().eq('user_id', userId);
+      if (error) throw error;
+    }
+    return { ok: true, message: '✅ Progress berhasil di-reset! Mulai dari awal lagi yuk.' };
+  } catch (err) {
+    console.error('resetUserProgress failed:', err);
+    return { ok: false, message: '⚠️ Gagal reset progress. Coba refresh atau login ulang.' };
+  }
+}
+
 export async function seedChapters(): Promise<{ ok: boolean; message: string }> {
   try {
     // Try seeding via supabase-js — works if user has teacher/admin role

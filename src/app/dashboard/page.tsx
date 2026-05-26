@@ -1,7 +1,7 @@
 'use client';
 
 import { useAuth } from '@/lib/AuthContext';
-import { useChapters, useStudentProgress, useNilai, computeTaskInbox, seedChapters } from '@/lib/supabase-data';
+import { useChapters, useStudentProgress, useNilai, computeTaskInbox, resetUserProgress } from '@/lib/supabase-data';
 import Link from 'next/link';
 import { useState } from 'react';
 
@@ -10,8 +10,9 @@ export default function DashboardPage() {
   const { chapters, loading: chLoading } = useChapters();
   const { progress } = useStudentProgress();
   const { scores } = useNilai();
-  const [seeding, setSeeding] = useState(false);
-  const [seedMsg, setSeedMsg] = useState<string | null>(null);
+  const [resetting, setResetting] = useState(false);
+  const [resetMsg, setResetMsg] = useState<string | null>(null);
+  const [confirmReset, setConfirmReset] = useState(false);
 
   if (chLoading) {
     return (
@@ -45,13 +46,18 @@ export default function DashboardPage() {
 
   const displayName = user?.displayName || user?.email?.split('@')[0] || 'Siswa';
 
-  const handleSeed = async () => {
-    setSeeding(true);
-    setSeedMsg(null);
-    const result = await seedChapters();
-    setSeedMsg(result.message);
-    setSeeding(false);
-    setTimeout(() => setSeedMsg(null), 4000);
+  const handleReset = async () => {
+    if (!user?.uid) return;
+    setConfirmReset(false);
+    setResetting(true);
+    setResetMsg(null);
+    const result = await resetUserProgress(user.uid);
+    setResetMsg(result.message);
+    setResetting(false);
+    setTimeout(() => {
+      setResetMsg(null);
+      window.location.reload();
+    }, 2000);
   };
 
   // Score averages from nilai subcollection
@@ -70,18 +76,38 @@ export default function DashboardPage() {
             <h1 className="text-xl lg:text-2xl font-bold">Om Swastyastu, {displayName} 🙏</h1>
             <p className="text-sm text-[#5C7A6E] mt-0.5">Lanjutkan belajar Susila Hindu</p>
           </div>
-          <button
-            onClick={handleSeed}
-            disabled={seeding}
-            className="text-xs text-[#5C7A6E] hover:text-[#1F3D30] underline underline-offset-2 disabled:opacity-50 flex-shrink-0"
-            title="Hapus semua data & isi ulang materi"
-          >
-            {seeding ? '⏳' : '🔁 Reset Data'}
-          </button>
+          {confirmReset ? (
+            <>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleReset}
+                  disabled={resetting}
+                  className="text-xs text-red-600 hover:text-red-800 bg-red-100 rounded-xl px-3 py-1.5 font-semibold disabled:opacity-50"
+                >
+                  {resetting ? '⏳' : '⚠️ Yakin, Reset'}
+                </button>
+                <button
+                  onClick={() => setConfirmReset(false)}
+                  className="text-xs text-[#5C7A6E] hover:text-[#1F3D30] underline underline-offset-2"
+                >
+                  Batal
+                </button>
+              </div>
+            </>
+          ) : (
+            <button
+              onClick={() => setConfirmReset(true)}
+              disabled={resetting}
+              className="text-xs text-[#5C7A6E] hover:text-[#1F3D30] underline underline-offset-2 disabled:opacity-50 flex-shrink-0"
+              title="Hapus semua progress & nilai, mulai dari awal lagi"
+            >
+              {resetting ? '⏳' : '🔁 Mulai Awal'}
+            </button>
+          )}
         </div>
-        {seedMsg && (
-          <div className={`mt-2 text-xs font-medium px-3 py-1.5 rounded-lg ${seedMsg.startsWith('✅') ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
-            {seedMsg}
+        {resetMsg && (
+          <div className={`mt-2 text-xs font-medium px-3 py-1.5 rounded-lg ${resetMsg.startsWith('✅') ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+            {resetMsg}
           </div>
         )}
       </div>
@@ -98,11 +124,7 @@ export default function DashboardPage() {
           {chapters.length === 0 ? (
             <>
               <p className="text-lg">📭 Belum ada materi</p>
-              <p className="text-sm text-[#5C7A6E]">Database masih kosong. Klik &quot;Reset Data&quot; di kanan atas atau tombol di bawah untuk mengisi materi.</p>
-              <button onClick={handleSeed} disabled={seeding}
-                className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#1F3D30] text-white rounded-xl text-sm font-semibold hover:bg-[#2A4D3E] disabled:opacity-50 transition-colors">
-                {seeding ? '⏳ Mengisi materi...' : '🌱 Seed Data Materi'}
-              </button>
+              <p className="text-sm text-[#5C7A6E]">Sepertinya database materi belum terisi. Hubungi guru/admin untuk mengisi data.</p>
             </>
           ) : chapters.length !== 6 ? (
             <>
