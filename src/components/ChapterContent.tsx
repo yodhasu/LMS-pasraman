@@ -11,6 +11,8 @@ interface Props {
   matProgress: Record<string, { viewed: boolean; viewedAt: string | null }>;
   materialStepDone: boolean;
   onMaterialDone: () => void;
+  isTeacher?: boolean;
+  onDeleteMaterial?: (materialId: string) => void;
 }
 
 function MaterialIcon({ type }: { type: ChapterMaterial['type'] }) {
@@ -31,7 +33,7 @@ function MaterialLabel({ type }: { type: ChapterMaterial['type'] }) {
   }
 }
 
-export default function ChapterContent({ materials, matProgress, materialStepDone, onMaterialDone }: Props) {
+export default function ChapterContent({ materials, matProgress, materialStepDone, onMaterialDone, isTeacher, onDeleteMaterial }: Props) {
   const [mediaUrl, setMediaUrl] = useState<string | null>(null);
   const [mediaCaption, setMediaCaption] = useState<string | null>(null);
 
@@ -65,9 +67,22 @@ export default function ChapterContent({ materials, matProgress, materialStepDon
                 <span className="text-xs font-semibold text-[#5C7A6E] uppercase tracking-wide">
                   {MaterialLabel({ type: material.type })} {idx + 1}
                 </span>
-                {isViewed && (
-                  <span className="ml-auto text-[11px] font-medium text-emerald-600">✓ Dibaca</span>
-                )}
+                <div className="ml-auto flex items-center gap-2">
+                  {isTeacher && onDeleteMaterial && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); if (confirm('Hapus materi ini?')) onDeleteMaterial(material.id); }}
+                      className="text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg p-1 transition-colors"
+                      title="Hapus materi"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                        <path d="M3 3l8 8M11 3l-8 8" />
+                      </svg>
+                    </button>
+                  )}
+                  {isViewed && (
+                    <span className="text-[11px] font-medium text-emerald-600">✓ Dibaca</span>
+                  )}
+                </div>
               </div>
 
               {/* Section content */}

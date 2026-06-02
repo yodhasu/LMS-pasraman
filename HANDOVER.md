@@ -1,68 +1,58 @@
 # LMS Pasraman — Handover
-> 2025-05-25 | Yuu → next session
+> 2026-06-02 | Vela → next session
 
 ## What Just Happened
 
-Refactor besar — 3 bug fixed + schema restructuring:
+Teacher features implemented + auth cleanup + AGY-reviewed:
 
-1. **Nilai dipisah dari progress** — skor sekarang di `users/{uid}/nilai/{ch-type}`, progress cuma boolean
-2. **Tugas jadi MCQ** — sebelumnya cuma tombol "Tandai Selesai", sekarang render MCQTest kayak postTest
-3. **Answer tracking** — submission murid tercatat di `materi/{ch}/tasks[{idx}].answer[]` dan `postTestOptional.answer[]`
+1. **Username+password auth** — login pure username (no email visible), internal email `{username}@pasraman.id` handled by Supabase Auth. Migration `20260602_username_password_auth.sql` adds bcrypt password hashing.
+2. **Teacher view** — guru001 auto-detects as teacher. Materi page shows "+ Tambah Bab" button. Chapter detail has "✏️ Edit Bab" link.
+3. **Material management** — red X delete button on each material box (teacher only), with confirmation dialog.
+4. **Bab creation flow** — Tambah Bab → creates placeholder chapter in Supabase → redirects to `/materi/bab-X?teacher=true` with editable fields.
+5. **Editable chapter metadata** — title, subtitle, description, coverEmoji, coverColor all inline-editable for teachers with save button.
+6. **RLS hardened** — `chapter_materials` and `material_progress` now have proper RLS policies (`20260602_chapter_materials_rls.sql`).
 
 ## Current State
 
-- **Deployed:** https://lmspasraman.web.app ✅
-- **Repo:** https://github.com/yodhasu/LMS-pasraman (commit `ec01ce8`)
-- **Build:** passing — TypeScript clean, 15 static pages
+- **Deploy-ready:** build passing — TypeScript clean, 15 static pages
+- **Repo:** https://github.com/yodhasu/LMS-pasraman (uncommitted changes)
+- **Auth:** Supabase Auth, username+password, `app_users` with role (student/teacher/admin)
 
-## Firestore Schema
+## DB Schema (Supabase)
 
 ```
-materi/{bab-1..bab-6}
-├── preTest: MCQ[] | null
-├── tasks: [{ id, title, description, dueDate, type: "mcq", questions: MCQ[], answer: TaskAnswer[] }]
-├── postTestMandatory: MCQ[]
-├── postTestOptional: { instruction, answer: PengayaanAnswer[] } | null
-└── ... (materialContent, videoUrl, coverEmoji, etc.)
+chapters (id, order_index, title, subtitle, description, cover_emoji, cover_color, ...)
+├── chapter_materials (id, chapter_id, section_order, type, content, caption)  ← NEW RLS
+├── chapter_tasks (id, chapter_id, title, description, due_date, task_order)
+├── mcq_questions (id, chapter_id, task_id, assessment, question_order, ...)
+└── pengayaan_prompts (chapter_id, instruction)
 
-users/{uid}
-├── displayName, email, role
-└── progress: {
-      "bab-1": { pretest: bool, materi: bool, tugas: bool, posttest: bool, complete: bool },
-      ...
-    }
-
-users/{uid}/nilai/{babId}-{type}
-└── { chapterId, type: "pretest"|"posttest"|"tugas"|"pengayaan", score, submittedAt }
+app_users (id → auth.users.id, username, password_hash, display_name, role)
+├── chapter_progress (user_id, chapter_id, pretest/materi/tugas/posttest, complete)
+├── scores (user_id, chapter_id, type, score)
+├── material_progress (user_id, material_id, viewed, viewed_at)               ← NEW RLS
+├── task_submissions (task_id, user_id, answers, score)
+└── pengayaan_submissions (chapter_id, user_id, link)
 ```
 
-### Answer Types
-- **TaskAnswer:** `{ userId, userName, answers: {qId: selectedIndex}, score, submittedAt }`
-- **PengayaanAnswer:** `{ userId, userName, link, submittedAt }`
+## Auth
 
-## Key Files
+- **Login:** username + password → internal email auto-generated → Supabase Auth
+- **Test accounts:** `siswa001` / `pasraman123`, `guru001` / `pasraman123`, `santri001` / `pasraman123`
+- **Role:** `guru001` should be teacher — run `scripts/seed-teacher.cjs` or fix manually if not
 
-| File | Role |
-|------|------|
-| `src/lib/types.ts` | All types: MCQ, ChapterTask, ChapterProgressDetail, ScoreRecord, TaskAnswer, PengayaanAnswer |
-| `src/lib/mock-data.ts` | Seed data — CHAPTERS export with MCQ tasks + empty answer arrays |
-| `src/lib/firestore-data.ts` | Hooks: useChapters, useStudentProgress, **useNilai** (new); mutations: markChapterStep, saveScore, submitTaskAnswer, submitPengayaanLink, seedChapters |
-| `src/components/MCQTest.tsx` | MCQ widget — callback: `onComplete(score, answers)`; supports type='tugas' |
-| `src/app/materi/[chapterId]/ChapterClient.tsx` | Chapter view — all progress from Firestore, tasks render MCQTest, pengayaan submits to answer[] |
-| `src/app/dashboard/page.tsx` | Dashboard — uses useNilai for score cards, computeTaskInbox with userId |
-| `src/app/nilai/page.tsx` | Nilai page — groups useNilai scores by chapter |
-| `src/app/tugas/page.tsx` | Tugas inbox — uses computeTaskInbox(chapters, progress, userId) |
+## Key Files (updated)
 
-## Auth / Login (updated: username+password)
-
-- **Username only** — no email needed on login. Internal email `{username}@pasraman.id` is hidden.
-- **Password:** bcrypt hash stored in `app_users.password_hash`, verified via `verify_user_password` RPC.
-- **Flow:** username → RPC checks bcrypt → returns internal email → `signInWithPassword(email, pass)` → session.
-- **Google OAuth:** not yet wired — Supabase Auth supports it, just needs UI button + `ensureAppUser` handles auto-registration.
-- **Test accounts:**
-  - `siswa001` / `pasraman123`
-  - `guru001` / `pasraman123`
-  - `santri001` / `pasraman123`
+| File | What changed |
+|------|-------------|
+| `src/lib/supabase-data.ts` | Removed VALID_CHAPTER_IDS hardcod. Added deleteChapterMaterial, createEmptyChapter, updateChapterMetadata. Dynamic progress map. |
+| `src/app/materi/page.tsx` | Tambah Bab button + create flow for teachers |
+| `src/app/materi/[chapterId]/ChapterClient.tsx` | Teacher mode with editable fields, ?teacher=true param, useEffect init, error checking on delete/save |
+| `src/app/materi/[chapterId]/page.tsx` | Dynamic generateStaticParams fetches all chapter IDs from Supabase at build time |
+| `src/components/ChapterContent.tsx` | isTeacher prop, red X delete button on materials |
+| `supabase/migrations/20260602_username_password_auth.sql` | Username+password auth migration |
+| `supabase/migrations/20260602_chapter_materials_rls.sql` | RLS policies for chapter_materials + material_progress |
+| `scripts/seed-teacher.cjs` | Teacher account seeder |
 
 ## Deploy Commands
 
@@ -72,13 +62,15 @@ npm run build
 firebase deploy --only hosting
 ```
 
-## ⚠️ Known: Reset Data Required
+## ⚠️ Before Deploy
 
-User yang udah ada progress lama harus klik **"🔁 Reset Data"** di dashboard — struktur `users/{uid}` dan `materi` berubah total dari versi sebelumnya.
+1. **Run RLS migration** on Supabase: `supabase/migrations/20260602_chapter_materials_rls.sql`
+2. **Ensure guru001 is teacher** — `scripts/seed-teacher.cjs` or manual SQL
+3. **guru001 password** — if created via dashboard, set password via SQL or reset
 
-## Potential Next Steps
+## Known Limitations
 
-- [ ] Tes end-to-end: login → seed → kerjakan bab 1 lengkap (pre-test → materi → tugas MCQ → post-test → pengayaan) → cek bab 2 unlock → cek nilai page
-- [ ] Teacher view / grading interface
-- [ ] Firestore security rules (currently test mode)
-- [ ] Tugas page: tampilkan jawaban MCQ yang sudah di-submit
+- **Chapter materials** table may have been created manually — migration includes `create table if not exists` to be safe
+- **New chapters beyond bab-6** need rebuild to appear as static pages (generateStaticParams fetches at build time)
+- **Delete material** still uses `window.location.reload()` — suboptimal but functional for static export
+- **AGY review:** race condition in createEmptyChapter (unlikely with single teacher), unsaved `initDone` anti-pattern fixed to useEffect

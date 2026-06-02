@@ -1,15 +1,16 @@
 'use client';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import ReactMarkdown from 'react-markdown';
 import {
   useChapters, useChapterMaterials, useStudentProgress, markChapterStep,
-  saveScore, submitTaskAnswer, submitPengayaanLink
+  saveScore, submitTaskAnswer, submitPengayaanLink,
+  deleteChapterMaterial, updateChapterMetadata,
 } from '@/lib/supabase-data';
 import { useAuth } from '@/lib/AuthContext';
 import MCQTest from '@/components/MCQTest';
 import ChapterContent from '@/components/ChapterContent';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ChapterProgressDetail, Chapter } from '@/lib/types';
 import MCQResult from '@/components/MCQResult';
 
@@ -41,22 +42,75 @@ const EMPTY_PROGRESS: ChapterProgressDetail = {
 
 export default function ChapterClient() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const chapterId = params.chapterId as string;
+  const isTeacherMode = searchParams.get('teacher') === 'true';
+
   const { chapters, loading } = useChapters();
   const { progress, user, refreshProgress } = useStudentProgress();
+  const { role } = useAuth();
   const { materials, matProgress, loading: matLoading } = useChapterMaterials(chapterId);
   const [pretestResult, setPretestResult] = useState<{ score: number; answers: Record<string, number> } | null>(null);
   const [posttestResult, setPosttestResult] = useState<{ score: number; answers: Record<string, number> } | null>(null);
+
+  // ── Teacher edit state ──
+  const isTeacher = role === 'teacher' || role === 'admin';
+  const teacherMode = isTeacher && isTeacherMode;
+  const [editTitle, setEditTitle] = useState('');
+  const [editSubtitle, setEditSubtitle] = useState('');
+  const [editDescription, setEditDescription] = useState('');
+  const [editCoverEmoji, setEditCoverEmoji] = useState('');
+  const [editCoverColor, setEditCoverColor] = useState('');
+  const [editing, setEditing] = useState(false);
+  const [saved, setSaved] = useState(false);
 
   const chapter = chapters.find(c => c.id === chapterId);
   const cIdx = chapter ? chapters.findIndex(c => c.id === chapterId) : -1;
   const prevChapter = (cIdx > 0 && chapter) ? chapters[cIdx - 1] : null;
   const prevCompleted = !prevChapter || (progress[prevChapter.id]?.complete ?? false);
-  const isLocked = !!chapter && !prevCompleted;
+  const isLocked = !!chapter && !prevCompleted && !isTeacher;
 
   const prog: ChapterProgressDetail = chapter
     ? (progress[chapterId] || { ...EMPTY_PROGRESS })
     : { ...EMPTY_PROGRESS };
+
+  // ── Init edit fields when chapter loads ──
+  useEffect(() => {
+    if (chapter) {
+      setEditTitle(chapter.title);
+      setEditSubtitle(chapter.subtitle);
+      setEditDescription(chapter.description);
+      setEditCoverEmoji(chapter.coverEmoji);
+      setEditCoverColor(chapter.coverColor);
+    }
+  }, [chapter?.id]);
+
+  const handleDeleteMaterial = async (materialId: string) => {
+    const ok = await deleteChapterMaterial(materialId);
+    if (ok) {
+      window.location.reload();
+    } else {
+      alert('Gagal menghapus materi. Coba lagi.');
+    }
+  };
+
+  const handleSaveMetadata = async () => {
+    setEditing(true);
+    const ok = await updateChapterMetadata(chapterId, {
+      title: editTitle,
+      subtitle: editSubtitle,
+      description: editDescription,
+      coverEmoji: editCoverEmoji,
+      coverColor: editCoverColor,
+    });
+    setEditing(false);
+    if (ok) {
+      setSaved(true);
+      setTimeout(() => { setSaved(false); window.location.reload(); }, 800);
+    } else {
+      alert('Gagal menyimpan. Coba lagi.');
+    }
+  };
 
   if (loading) {
     return (
@@ -112,8 +166,8 @@ export default function ChapterClient() {
   const materialStepDone = prog.materi || false;
   const tasksAllDone = chapter.tasks.length === 0 || prog.tugas;
   const postTestStepDone = prog.posttest || false;
-  const postTestUnlocked = materialStepDone && tasksAllDone;
-  const optionalUnlocked = postTestStepDone;
+  const postTestUnlocked = teacherMode || (materialStepDone && tasksAllDone);
+  const optionalUnlocked = teacherMode || postTestStepDone;
   const displayName = user?.displayName || user?.email?.split('@')[0] || 'Siswa';
 
   // ── Handlers ──
@@ -159,14 +213,60 @@ export default function ChapterClient() {
 
   return (
     <div className="max-w-2xl mx-auto space-y-5 pb-8">
-      <Link href="/materi" className="inline-flex items-center gap-1.5 text-sm text-[#5C7A6E] hover:text-[#1F3D30]">
-        ← Kembali ke Materi
-      </Link>
+      <div className="flex items-center justify-between">
+        <Link href="/materi" className="inline-flex items-center gap-1.5 text-sm text-[#5C7A6E] hover:text-[#1F3D30]">
+          ← Kembali ke Materi
+        </Link>
+        {isTeacher && !teacherMode && (
+          <Link href={`/materi/${chapterId}?teacher=true`}
+            className="text-xs font-semibold text-[#1F3D30] hover:underline">
+            ✏️ Edit Bab
+          </Link>
+        )}
+      </div>
 
-      <div className={`rounded-2xl bg-gradient-to-br ${chapter.coverColor} p-5`}>
+      {/* Chapter Header */}
+      <div className={`rounded-2xl bg-gradient-to-br ${teacherMode ? editCoverColor : chapter.coverColor} p-5`}>
         <p className="text-xs font-bold uppercase tracking-wide text-[#1F3D30]/60">Bab {cIdx + 1}</p>
-        <h1 className="text-xl lg:text-2xl font-bold mt-1">{chapter.title}</h1>
-        <p className="text-sm text-[#1F3D30]/70 mt-1">{chapter.subtitle}</p>
+        {teacherMode ? (
+          <div className="space-y-3 mt-2">
+            <div>
+              <label className="text-[10px] font-semibold uppercase text-[#1F3D30]/50">Cover Emoji</label>
+              <input value={editCoverEmoji} onChange={e => setEditCoverEmoji(e.target.value)}
+                className="block w-20 px-2 py-1 text-sm border border-[#1F3D30]/20 rounded-lg bg-white/60 mt-0.5" />
+            </div>
+            <div>
+              <label className="text-[10px] font-semibold uppercase text-[#1F3D30]/50">Judul Bab</label>
+              <input value={editTitle} onChange={e => setEditTitle(e.target.value)}
+                className="block w-full px-3 py-2 text-lg font-bold border border-[#1F3D30]/20 rounded-lg bg-white/60 mt-0.5" />
+            </div>
+            <div>
+              <label className="text-[10px] font-semibold uppercase text-[#1F3D30]/50">Subtitle</label>
+              <input value={editSubtitle} onChange={e => setEditSubtitle(e.target.value)}
+                className="block w-full px-3 py-2 text-sm border border-[#1F3D30]/20 rounded-lg bg-white/60 mt-0.5" />
+            </div>
+            <div>
+              <label className="text-[10px] font-semibold uppercase text-[#1F3D30]/50">Deskripsi</label>
+              <textarea value={editDescription} onChange={e => setEditDescription(e.target.value)} rows={2}
+                className="block w-full px-3 py-2 text-sm border border-[#1F3D30]/20 rounded-lg bg-white/60 mt-0.5 resize-none" />
+            </div>
+            <div>
+              <label className="text-[10px] font-semibold uppercase text-[#1F3D30]/50">Warna Cover (Tailwind gradient)</label>
+              <input value={editCoverColor} onChange={e => setEditCoverColor(e.target.value)}
+                className="block w-full px-3 py-2 text-sm border border-[#1F3D30]/20 rounded-lg bg-white/60 mt-0.5"
+                placeholder="from-green-100 to-emerald-200" />
+            </div>
+            <button onClick={handleSaveMetadata} disabled={editing}
+              className="px-4 py-2 bg-[#1F3D30] text-white rounded-xl text-sm font-semibold hover:bg-[#2A5A44] transition-colors disabled:opacity-50">
+              {editing ? 'Menyimpan...' : saved ? '✅ Tersimpan!' : '💾 Simpan Metadata'}
+            </button>
+          </div>
+        ) : (
+          <>
+            <h1 className="text-xl lg:text-2xl font-bold mt-1">{chapter.title}</h1>
+            <p className="text-sm text-[#1F3D30]/70 mt-1">{chapter.subtitle}</p>
+          </>
+        )}
       </div>
 
       {/* Pre-test */}
@@ -185,18 +285,20 @@ export default function ChapterClient() {
       )}
 
       {/* Materi */}
-      <SectionCard step={hasPreTest ? 2 : 1} title="Materi" description="Pelajari materi bab ini dengan saksama." done={materialStepDone} unlocked={preTestStepDone}>
+      <SectionCard step={hasPreTest ? 2 : 1} title="Materi" description="Pelajari materi bab ini dengan saksama." done={materialStepDone} unlocked={teacherMode || preTestStepDone}>
         <ChapterContent
           materials={materials}
           matProgress={matProgress}
           materialStepDone={materialStepDone}
           onMaterialDone={handleMaterialDone}
+          isTeacher={teacherMode}
+          onDeleteMaterial={handleDeleteMaterial}
         />
       </SectionCard>
 
-      {/* Tugas — now MCQ! */}
+      {/* Tugas */}
       {chapter.tasks.length > 0 && (
-        <SectionCard step={hasPreTest ? 3 : 2} title="Tugas" description="Kerjakan tugas berikut untuk melanjutkan." done={tasksAllDone} unlocked={materialStepDone}>
+        <SectionCard step={hasPreTest ? 3 : 2} title="Tugas" description="Kerjakan tugas berikut untuk melanjutkan." done={tasksAllDone} unlocked={teacherMode || materialStepDone}>
           <div className="ml-11 space-y-4">
             {chapter.tasks.map((task, tIdx) => (
               <div key={task.id} className={`p-4 rounded-xl border ${tasksAllDone ? 'border-emerald-200 bg-emerald-50' : 'border-[#1F3D30]/5 bg-[#FBF8F4]'}`}>
@@ -205,7 +307,7 @@ export default function ChapterClient() {
                   <p className="text-xs text-[#5C7A6E] mt-0.5">{task.description}</p>
                   {task.dueDate && <p className="text-xs font-medium text-[#C8A84E] mt-1">Deadline: {new Date(task.dueDate).toLocaleDateString('id-ID')}</p>}
                 </div>
-                {!tasksAllDone ? (
+                {!tasksAllDone && !teacherMode ? (
                   <MCQTest questions={task.questions} type="tugas" onComplete={handleTugasComplete(tIdx)} />
                 ) : (
                   <p className="text-sm text-emerald-700 font-medium">✅ Tugas sudah dikerjakan</p>

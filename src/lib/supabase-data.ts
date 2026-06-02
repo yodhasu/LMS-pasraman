@@ -8,7 +8,6 @@ import { CHAPTERS } from './mock-data';
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!;
-const VALID_CHAPTER_IDS = ['bab-1', 'bab-2', 'bab-3', 'bab-4', 'bab-5', 'bab-6'];
 const DEFAULT_PROGRESS: ChapterProgressDetail = {
   pretest: false,
   materi: false,
@@ -184,7 +183,6 @@ export function useChapters() {
       }
 
       const list: Chapter[] = (chaptersRes.data ?? [])
-        .filter((chapter) => VALID_CHAPTER_IDS.includes(chapter.id))
         .map((chapter) => {
           const chapterTasks = (tasksRes.data ?? [])
             .filter((task) => task.chapter_id === chapter.id)
@@ -286,6 +284,14 @@ export function useStudentProgress() {
   const [user, setUser] = useState<ReturnType<typeof normalizeUser>>(null);
 
   async function load(userId: string) {
+    // Get all chapter IDs to build progress map dynamically
+    const { data: chapterList } = await supabase
+      .from('chapters')
+      .select('id')
+      .order('order_index', { ascending: true });
+
+    const allChapterIds = (chapterList ?? []).map(c => c.id);
+
     const { data, error } = await supabase
       .from('chapter_progress')
       .select('*')
@@ -297,7 +303,7 @@ export function useStudentProgress() {
     }
 
     const mapped: StudentProgressMap = {};
-    for (const chapterId of VALID_CHAPTER_IDS) {
+    for (const chapterId of allChapterIds) {
       const row = data?.find((item) => item.chapter_id === chapterId);
       mapped[chapterId] = row ? {
         pretest: row.pretest === true,
@@ -668,4 +674,98 @@ export function computeTaskInbox(
     }
   }
   return items;
+}
+
+// ── Teacher CRUD ──────────────────────────────────────────────
+
+export async function deleteChapterMaterial(materialId: string): Promise<boolean> {
+  try {
+    const { error } = await supabase
+      .from('chapter_materials')
+      .delete()
+      .eq('id', materialId);
+    if (error) throw error;
+    return true;
+  } catch (err) {
+    console.error('deleteChapterMaterial failed:', err);
+    return false;
+  }
+}
+
+export async function createEmptyChapter(): Promise<{ ok: boolean; id?: string; message: string }> {
+  try {
+    // Find next available bab number
+    const { data: existing, error: selectErr } = await supabase
+      .from('chapters')
+      .select('id, order_index')
+      .order('order_index', { ascending: false })
+      .limit(1);
+
+    if (selectErr) throw selectErr;
+
+    const nextNum = existing && existing.length > 0
+      ? (existing[0].order_index ?? existing.length) + 1
+      : 1;
+
+    const babId = `bab-${nextNum}`;
+
+    // Check if this ID already exists
+    const { data: dup } = await supabase
+      .from('chapters')
+      .select('id')
+      .eq('id', babId)
+      .maybeSingle();
+
+    if (dup) {
+      return { ok: false, message: `Bab ID ${babId} sudah ada. Gunakan seed script.` };
+    }
+
+    const { error: insertErr } = await supabase
+      .from('chapters')
+      .insert({
+        id: babId,
+        order_index: nextNum,
+        title: 'Bab Baru',
+        subtitle: 'Deskripsi singkat bab ini',
+        description: 'Tulis deskripsi lengkap bab di sini.',
+        material_content: '',
+        material_video_url: null,
+        cover_emoji: '📖',
+        cover_color: 'from-green-100 to-emerald-200',
+      });
+
+    if (insertErr) throw insertErr;
+
+    return { ok: true, id: babId, message: '✅ Bab baru berhasil dibuat!' };
+  } catch (err) {
+    console.error('createEmptyChapter failed:', err);
+    return { ok: false, message: '⚠️ Gagal membuat bab baru.' };
+  }
+}
+
+export async function updateChapterMetadata(
+  chapterId: string,
+  data: { title?: string; subtitle?: string; description?: string; coverEmoji?: string; coverColor?: string },
+): Promise<boolean> {
+  try {
+    const update: Record<string, unknown> = {};
+    if (data.title !== undefined) update.title = data.title;
+    if (data.subtitle !== undefined) update.subtitle = data.subtitle;
+    if (data.description !== undefined) update.description = data.description;
+    if (data.coverEmoji !== undefined) update.cover_emoji = data.coverEmoji;
+    if (data.coverColor !== undefined) update.cover_color = data.coverColor;
+
+    if (Object.keys(update).length === 0) return true;
+
+    const { error } = await supabase
+      .from('chapters')
+      .update(update)
+      .eq('id', chapterId);
+
+    if (error) throw error;
+    return true;
+  } catch (err) {
+    console.error('updateChapterMetadata failed:', err);
+    return false;
+  }
 }
