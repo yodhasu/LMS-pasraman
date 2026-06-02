@@ -14,6 +14,7 @@ export default function MCQTest({ questions, type = 'post', onComplete }: Props)
   const [score, setScore] = useState<number | null>(null);
 
   const handleSubmit = () => {
+    if (questions.length === 0) return;
     let correct = 0;
     questions.forEach(q => {
       if (answers[q.id] === q.correctIndex) correct++;
@@ -25,6 +26,14 @@ export default function MCQTest({ questions, type = 'post', onComplete }: Props)
   };
 
   const allAnswered = questions.every(q => answers[q.id] !== undefined);
+
+  if (questions.length === 0) {
+    return (
+      <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-sm text-amber-800">
+        ⚠️ Soal belum dikonfigurasi. Hubungi guru atau lengkapi konfigurasi bab terlebih dahulu.
+      </div>
+    );
+  }
   const isPre = type === 'pre';
   const isTugas = type === 'tugas';
 
