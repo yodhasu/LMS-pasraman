@@ -14,7 +14,7 @@ create or replace function public.verify_user_password(
 returns table(user_id uuid, email text)
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 begin
   return query
@@ -40,7 +40,7 @@ create or replace function public.create_app_user(
 returns uuid
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   v_user_id uuid;
