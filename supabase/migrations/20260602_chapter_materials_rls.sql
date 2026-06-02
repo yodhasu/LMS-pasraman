@@ -46,8 +46,11 @@ create policy "chapter_materials: delete for teacher/admin"
   using (public.is_teacher_or_admin());
 
 -- 4. Also handle material_progress table (same situation — may have been created manually)
-create table if not exists public.material_progress (
-  user_id text not null references public.app_users(id) on delete cascade,
+-- Drop if created with wrong type first
+drop table if exists public.material_progress;
+
+create table public.material_progress (
+  user_id uuid not null references public.app_users(id) on delete cascade,
   material_id text not null references public.chapter_materials(id) on delete cascade,
   viewed boolean not null default false,
   viewed_at timestamptz,
@@ -61,7 +64,7 @@ create policy "material_progress: select own or teacher/all"
   on public.material_progress for select
   to authenticated
   using (
-    user_id = auth.uid()::text
+    user_id = auth.uid()
     or public.is_teacher_or_admin()
   );
 
@@ -69,11 +72,11 @@ drop policy if exists "material_progress: insert own" on public.material_progres
 create policy "material_progress: insert own"
   on public.material_progress for insert
   to authenticated
-  with check (user_id = auth.uid()::text);
+  with check (user_id = auth.uid());
 
 drop policy if exists "material_progress: update own" on public.material_progress;
 create policy "material_progress: update own"
   on public.material_progress for update
   to authenticated
-  using (user_id = auth.uid()::text)
-  with check (user_id = auth.uid()::text);
+  using (user_id = auth.uid())
+  with check (user_id = auth.uid());
