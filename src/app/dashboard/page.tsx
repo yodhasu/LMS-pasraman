@@ -1,20 +1,21 @@
 'use client';
 
 import { useAuth } from '@/lib/AuthContext';
-import { useChapters, useStudentProgress, useNilai, computeTaskInbox, resetUserProgress } from '@/lib/supabase-data';
+import { useChapters, useStudentProgress, useNilai, computeTaskInbox, resetUserProgress, resetPrototypeData } from '@/lib/supabase-data';
 import Link from 'next/link';
 import { useState } from 'react';
 
 export default function DashboardPage() {
-  const { user } = useAuth();
+  const { user, role, loading: authLoading } = useAuth();
   const { chapters, loading: chLoading } = useChapters();
   const { progress } = useStudentProgress();
   const { scores } = useNilai();
   const [resetting, setResetting] = useState(false);
   const [resetMsg, setResetMsg] = useState<string | null>(null);
   const [confirmReset, setConfirmReset] = useState(false);
+  const roleReady = !user || role !== null;
 
-  if (chLoading) {
+  if (chLoading || authLoading) {
     return (
       <div className="max-w-3xl mx-auto flex items-center justify-center min-h-[300px]">
         <div className="w-8 h-8 border-2 border-[#e8efe4] border-t-[#1F3D30] rounded-full animate-spin" />
@@ -49,19 +50,24 @@ export default function DashboardPage() {
   ] : [];
 
   const displayName = user?.displayName || user?.email?.split('@')[0] || 'Siswa';
+  const isTeacher = role === 'teacher' || role === 'admin';
 
   const handleReset = async () => {
     if (!user?.uid) return;
     setConfirmReset(false);
     setResetting(true);
     setResetMsg(null);
-    const result = await resetUserProgress(user.uid);
+    const result = isTeacher
+      ? await resetPrototypeData()
+      : await resetUserProgress(user.uid);
     setResetMsg(result.message);
     setResetting(false);
-    setTimeout(() => {
-      setResetMsg(null);
-      window.location.reload();
-    }, 2000);
+    if (result.ok) {
+      setTimeout(() => {
+        setResetMsg(null);
+        window.location.reload();
+      }, 1200);
+    }
   };
 
   // Score averages from nilai subcollection
@@ -85,10 +91,10 @@ export default function DashboardPage() {
               <div className="flex gap-2">
                 <button
                   onClick={handleReset}
-                  disabled={resetting}
+                  disabled={resetting || !roleReady}
                   className="text-xs text-red-600 hover:text-red-800 bg-red-100 rounded-xl px-3 py-1.5 font-semibold disabled:opacity-50"
                 >
-                  {resetting ? '⏳' : '⚠️ Yakin, Reset'}
+                  {resetting ? '⏳' : isTeacher ? '⚠️ Yakin, Reset Prototype' : '⚠️ Yakin, Reset'}
                 </button>
                 <button
                   onClick={() => setConfirmReset(false)}
@@ -101,11 +107,11 @@ export default function DashboardPage() {
           ) : (
             <button
               onClick={() => setConfirmReset(true)}
-              disabled={resetting}
+              disabled={resetting || !roleReady}
               className="text-xs text-[#5C7A6E] hover:text-[#1F3D30] underline underline-offset-2 disabled:opacity-50 flex-shrink-0"
-              title="Hapus semua progress & nilai, mulai dari awal lagi"
+              title={isTeacher ? 'Balikin seluruh data prototype ke baseline awal' : 'Hapus semua progress & nilai, mulai dari awal lagi'}
             >
-              {resetting ? '⏳' : '🔁 Mulai Awal'}
+              {resetting ? '⏳' : isTeacher ? '🔁 Reset Prototype' : '🔁 Mulai Awal'}
             </button>
           )}
         </div>
@@ -116,24 +122,12 @@ export default function DashboardPage() {
         )}
       </div>
 
-      {chapters.length > 0 && chapters.length !== 6 && (
-        <div className="bg-amber-50 rounded-2xl border border-amber-200 p-4 text-center">
-          <p className="text-sm font-semibold text-amber-800">⚠️ Data tidak normal: {chapters.length} bab (seharusnya 6)</p>
-          <p className="text-xs text-amber-600 mt-1">Klik &quot;🔁 Reset Data&quot; di kanan atas untuk memperbaiki.</p>
-        </div>
-      )}
-
       {!currentChapter ? (
         <div className="bg-white rounded-2xl border border-[#1F3D30]/5 p-8 text-center space-y-4">
           {chapters.length === 0 ? (
             <>
               <p className="text-lg">📭 Belum ada materi</p>
               <p className="text-sm text-[#5C7A6E]">Sepertinya database materi belum terisi. Hubungi guru/admin untuk mengisi data.</p>
-            </>
-          ) : chapters.length !== 6 ? (
-            <>
-              <p className="text-lg">⚠️ Data Tidak Normal</p>
-              <p className="text-sm text-[#5C7A6E]">Terdeteksi {chapters.length} bab (seharusnya 6). Klik &quot;Reset Data&quot; di kanan atas untuk memperbaiki.</p>
             </>
           ) : (
             <p className="text-lg">🎉 Semua bab sudah selesai!</p>

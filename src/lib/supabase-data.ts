@@ -596,6 +596,20 @@ export async function resetUserProgress(userId: string): Promise<{ ok: boolean; 
   }
 }
 
+export async function resetPrototypeData(): Promise<{ ok: boolean; message: string }> {
+  try {
+    const { data, error } = await supabase.rpc('reset_lms_prototype_data');
+    if (error) throw error;
+    return {
+      ok: true,
+      message: `✅ Data prototype di-reset. ${data?.chapter_count ?? 0} bab / ${data?.material_count ?? 0} materi aktif.`,
+    };
+  } catch (err) {
+    console.error('resetPrototypeData failed:', err);
+    return { ok: false, message: '⚠️ Gagal reset data prototype. Cek console atau role guru/admin.' };
+  }
+}
+
 export async function seedChapters(): Promise<{ ok: boolean; message: string }> {
   try {
     // Try seeding via supabase-js — works if user has teacher/admin role
