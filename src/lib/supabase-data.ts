@@ -692,6 +692,61 @@ export async function deleteChapterMaterial(materialId: string): Promise<boolean
   }
 }
 
+export async function createChapterMaterial(
+  chapterId: string,
+  data: { type: ChapterMaterial['type']; content: string; caption?: string | null },
+): Promise<boolean> {
+  try {
+    const { data: last, error: lastErr } = await supabase
+      .from('chapter_materials')
+      .select('section_order')
+      .eq('chapter_id', chapterId)
+      .order('section_order', { ascending: false })
+      .limit(1);
+    if (lastErr) throw lastErr;
+
+    const nextOrder = last && last.length > 0 ? ((last[0].section_order ?? 0) + 1) : 0;
+
+    const { error } = await supabase
+      .from('chapter_materials')
+      .insert({
+        chapter_id: chapterId,
+        section_order: nextOrder,
+        type: data.type,
+        content: data.content,
+        caption: data.caption ?? null,
+      });
+    if (error) throw error;
+    return true;
+  } catch (err) {
+    console.error('createChapterMaterial failed:', err);
+    return false;
+  }
+}
+
+export async function updateChapterMaterial(
+  materialId: string,
+  data: { type?: ChapterMaterial['type']; content?: string; caption?: string | null },
+): Promise<boolean> {
+  try {
+    const update: Record<string, unknown> = {};
+    if (data.type !== undefined) update.type = data.type;
+    if (data.content !== undefined) update.content = data.content;
+    if (data.caption !== undefined) update.caption = data.caption;
+    if (Object.keys(update).length === 0) return true;
+
+    const { error } = await supabase
+      .from('chapter_materials')
+      .update(update)
+      .eq('id', materialId);
+    if (error) throw error;
+    return true;
+  } catch (err) {
+    console.error('updateChapterMaterial failed:', err);
+    return false;
+  }
+}
+
 export async function createEmptyChapter(): Promise<{ ok: boolean; id?: string; message: string }> {
   try {
     // Find next available bab number

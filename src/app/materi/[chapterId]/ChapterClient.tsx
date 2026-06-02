@@ -5,7 +5,7 @@ import ReactMarkdown from 'react-markdown';
 import {
   useChapters, useChapterMaterials, useStudentProgress, markChapterStep,
   saveScore, submitTaskAnswer, submitPengayaanLink,
-  deleteChapterMaterial, updateChapterMetadata,
+  deleteChapterMaterial, updateChapterMetadata, createChapterMaterial, updateChapterMaterial,
 } from '@/lib/supabase-data';
 import { useAuth } from '@/lib/AuthContext';
 import MCQTest from '@/components/MCQTest';
@@ -56,6 +56,7 @@ export default function ChapterClient() {
   // ── Teacher edit state ──
   const isTeacher = role === 'teacher' || role === 'admin';
   const teacherMode = isTeacher && isTeacherMode;
+  const teacherView = isTeacher;
   const [editTitle, setEditTitle] = useState('');
   const [editSubtitle, setEditSubtitle] = useState('');
   const [editDescription, setEditDescription] = useState('');
@@ -68,7 +69,7 @@ export default function ChapterClient() {
   const cIdx = chapter ? chapters.findIndex(c => c.id === chapterId) : -1;
   const prevChapter = (cIdx > 0 && chapter) ? chapters[cIdx - 1] : null;
   const prevCompleted = !prevChapter || (progress[prevChapter.id]?.complete ?? false);
-  const isLocked = !!chapter && !prevCompleted && !isTeacher;
+  const isLocked = !!chapter && !prevCompleted && !teacherView;
 
   const prog: ChapterProgressDetail = chapter
     ? (progress[chapterId] || { ...EMPTY_PROGRESS })
@@ -91,6 +92,24 @@ export default function ChapterClient() {
       window.location.reload();
     } else {
       alert('Gagal menghapus materi. Coba lagi.');
+    }
+  };
+
+  const handleCreateMaterial = async (data: { type: Chapter['materials'][number]['type']; content: string; caption?: string | null }) => {
+    const ok = await createChapterMaterial(chapterId, data);
+    if (ok) {
+      window.location.reload();
+    } else {
+      alert('Gagal menambah materi. Coba lagi.');
+    }
+  };
+
+  const handleUpdateMaterial = async (materialId: string, data: { type: Chapter['materials'][number]['type']; content: string; caption?: string | null }) => {
+    const ok = await updateChapterMaterial(materialId, data);
+    if (ok) {
+      window.location.reload();
+    } else {
+      alert('Gagal mengubah materi. Coba lagi.');
     }
   };
 
@@ -166,8 +185,8 @@ export default function ChapterClient() {
   const materialStepDone = prog.materi || false;
   const tasksAllDone = chapter.tasks.length === 0 || prog.tugas;
   const postTestStepDone = prog.posttest || false;
-  const postTestUnlocked = teacherMode || (materialStepDone && tasksAllDone);
-  const optionalUnlocked = teacherMode || postTestStepDone;
+  const postTestUnlocked = teacherView || materialStepDone && tasksAllDone;
+  const optionalUnlocked = teacherView || postTestStepDone;
   const displayName = user?.displayName || user?.email?.split('@')[0] || 'Siswa';
 
   // ── Handlers ──
@@ -271,8 +290,10 @@ export default function ChapterClient() {
 
       {/* Pre-test */}
       {hasPreTest ? (
-        <SectionCard step={1} title="Pre-Test" description="Kerjakan pre-test untuk mengukur pemahaman awal." done={preTestStepDone} unlocked={true}>
-          {pretestResult ? (
+        <SectionCard step={1} title="Pre-Test" description={teacherView ? "Preview soal pre-test siswa." : "Kerjakan pre-test untuk mengukur pemahaman awal."} done={teacherView ? true : preTestStepDone} unlocked={true}>
+          {teacherView ? (
+            <div className="ml-11 text-sm text-[#5C7A6E]">{chapter.preTest!.length} soal pre-test tersedia.</div>
+          ) : pretestResult ? (
             <MCQResult type="pre" score={pretestResult.score} answers={pretestResult.answers} questions={chapter.preTest!} />
           ) : !preTestStepDone ? (
             <MCQTest questions={chapter.preTest!} type="pre" onComplete={handlePreTestComplete} />
@@ -285,20 +306,23 @@ export default function ChapterClient() {
       )}
 
       {/* Materi */}
-      <SectionCard step={hasPreTest ? 2 : 1} title="Materi" description="Pelajari materi bab ini dengan saksama." done={materialStepDone} unlocked={teacherMode || preTestStepDone}>
+      <SectionCard step={hasPreTest ? 2 : 1} title="Materi" description={teacherView ? "Preview dan edit isi bab." : "Pelajari materi bab ini dengan saksama."} done={teacherView ? true : materialStepDone} unlocked={teacherView || preTestStepDone}>
         <ChapterContent
+          chapterId={chapterId}
           materials={materials}
           matProgress={matProgress}
           materialStepDone={materialStepDone}
           onMaterialDone={handleMaterialDone}
           isTeacher={teacherMode}
           onDeleteMaterial={handleDeleteMaterial}
+          onCreateMaterial={handleCreateMaterial}
+          onUpdateMaterial={handleUpdateMaterial}
         />
       </SectionCard>
 
       {/* Tugas */}
       {chapter.tasks.length > 0 && (
-        <SectionCard step={hasPreTest ? 3 : 2} title="Tugas" description="Kerjakan tugas berikut untuk melanjutkan." done={tasksAllDone} unlocked={teacherMode || materialStepDone}>
+        <SectionCard step={hasPreTest ? 3 : 2} title="Tugas" description={teacherView ? "Preview tugas siswa untuk bab ini." : "Kerjakan tugas berikut untuk melanjutkan."} done={teacherView ? true : tasksAllDone} unlocked={teacherView || materialStepDone}>
           <div className="ml-11 space-y-4">
             {chapter.tasks.map((task, tIdx) => (
               <div key={task.id} className={`p-4 rounded-xl border ${tasksAllDone ? 'border-emerald-200 bg-emerald-50' : 'border-[#1F3D30]/5 bg-[#FBF8F4]'}`}>
@@ -307,7 +331,9 @@ export default function ChapterClient() {
                   <p className="text-xs text-[#5C7A6E] mt-0.5">{task.description}</p>
                   {task.dueDate && <p className="text-xs font-medium text-[#C8A84E] mt-1">Deadline: {new Date(task.dueDate).toLocaleDateString('id-ID')}</p>}
                 </div>
-                {!tasksAllDone && !teacherMode ? (
+                {teacherView ? (
+                  <p className="text-sm text-[#5C7A6E]">{task.questions.length} soal tugas tersedia.</p>
+                ) : !tasksAllDone ? (
                   <MCQTest questions={task.questions} type="tugas" onComplete={handleTugasComplete(tIdx)} />
                 ) : (
                   <p className="text-sm text-emerald-700 font-medium">✅ Tugas sudah dikerjakan</p>
@@ -320,8 +346,10 @@ export default function ChapterClient() {
 
       {/* Post-test Wajib */}
       <SectionCard step={hasPreTest ? (chapter.tasks.length > 0 ? 4 : 3) : (chapter.tasks.length > 0 ? 3 : 2)}
-        title="Post-Test Wajib" description="Kerjakan post-test untuk menyelesaikan bab." done={postTestStepDone} unlocked={postTestUnlocked}>
-        {posttestResult ? (
+        title="Post-Test Wajib" description={teacherView ? "Preview post-test siswa." : "Kerjakan post-test untuk menyelesaikan bab."} done={teacherView ? true : postTestStepDone} unlocked={postTestUnlocked}>
+        {teacherView ? (
+          <div className="ml-11 text-sm text-[#5C7A6E]">{chapter.postTestMandatory.length} soal post-test tersedia.</div>
+        ) : posttestResult ? (
           <MCQResult type="post" score={posttestResult.score} answers={posttestResult.answers} questions={chapter.postTestMandatory} />
         ) : !postTestStepDone ? (
           <MCQTest questions={chapter.postTestMandatory} type="post" onComplete={handlePostTestComplete} />
@@ -341,6 +369,7 @@ export default function ChapterClient() {
           unlocked={optionalUnlocked}
           user={user}
           displayName={displayName}
+          teacherView={teacherView}
         />
       )}
     </div>
@@ -348,13 +377,14 @@ export default function ChapterClient() {
 }
 
 // ── Pengayaan sub-component ──
-function PengayaanSection({ step, chapterId, postTestOptional, unlocked, user, displayName }: {
+function PengayaanSection({ step, chapterId, postTestOptional, unlocked, user, displayName, teacherView }: {
   step: number;
   chapterId: string;
   postTestOptional: NonNullable<Chapter['postTestOptional']>;
   unlocked: boolean;
   user: any;
   displayName: string;
+  teacherView: boolean;
 }) {
   const myAnswer = user ? postTestOptional.answer?.find((a: any) => a.userId === user.uid) : null;
   const [submittedLocally, setSubmittedLocally] = useState(false);
@@ -370,12 +400,14 @@ function PengayaanSection({ step, chapterId, postTestOptional, unlocked, user, d
 
   return (
     <SectionCard step={step} title="Tugas Pengayaan (Opsional)"
-      description="Tugas tambahan untuk memperdalam pemahaman." done={submitted} unlocked={unlocked}>
+      description={teacherView ? "Preview tugas pengayaan siswa." : "Tugas tambahan untuk memperdalam pemahaman."} done={teacherView ? true : submitted} unlocked={unlocked}>
       <div className="ml-11 space-y-3">
         <div className="p-4 bg-[#FBF8F4] rounded-xl border border-[#1F3D30]/5">
           <ReactMarkdown>{postTestOptional.instruction}</ReactMarkdown>
         </div>
-        {!submitted ? (
+        {teacherView ? (
+          <p className="text-sm text-[#5C7A6E]">{postTestOptional.answer?.length ?? 0} submission pengayaan tercatat.</p>
+        ) : !submitted ? (
           <div className="flex gap-2">
             <input type="url" placeholder="Link Google Drive / YouTube" value={link}
               onChange={e => setLink(e.target.value)}
