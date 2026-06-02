@@ -22,7 +22,7 @@ function AuthGuard({ children }: { children: ReactNode }) {
     }
 
     // No user on protected page → go to login
-    if (!user && pathname !== '/login') {
+    if (!user) {
       router.replace('/login');
       return;
     }

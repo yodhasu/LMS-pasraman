@@ -1,17 +1,17 @@
 'use client';
-import { useParams, useSearchParams } from 'next/navigation';
+import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import ReactMarkdown from 'react-markdown';
 import {
   useChapters, useChapterMaterials, useStudentProgress, markChapterStep,
-  saveScore, submitTaskAnswer, submitPengayaanLink, markMaterialViewed,
-  deleteChapterMaterial, updateChapterMetadata, createChapterMaterial, updateChapterMaterial,
+  saveScore, submitTaskAnswer, submitPengayaanLink,
+  saveChapterBatch, deleteChapter,
 } from '@/lib/supabase-data';
 import { useAuth } from '@/lib/AuthContext';
 import MCQTest from '@/components/MCQTest';
 import ChapterContent from '@/components/ChapterContent';
 import { useState, useEffect } from 'react';
-import { ChapterProgressDetail, Chapter } from '@/lib/types';
+import { ChapterProgressDetail, Chapter, ChapterMaterial, ChapterTask, MCQ } from '@/lib/types';
 import MCQResult from '@/components/MCQResult';
 
 function SectionCard({ step, title, description, done, unlocked, children }: {
@@ -40,32 +40,41 @@ const EMPTY_PROGRESS: ChapterProgressDetail = {
   pretest: false, materi: false, tugas: false, posttest: false, complete: false,
 };
 
+// ── Helpers ──
+let idCounter = 0;
+function freshId(prefix = 'tmp'): string {
+  idCounter++;
+  return `${prefix}_${Date.now()}_${idCounter}`;
+}
+
 export default function ChapterClient() {
   const params = useParams();
   const searchParams = useSearchParams();
+  const router = useRouter();
   const chapterId = params.chapterId as string;
   const isTeacherMode = searchParams.get('teacher') === 'true';
 
-  const [dataRefreshKey, setDataRefreshKey] = useState(0);
-  const { chapters, loading } = useChapters(dataRefreshKey);
+  const { chapters, loading: chLoading } = useChapters();
   const { progress, user, refreshProgress } = useStudentProgress();
   const { role } = useAuth();
-  const { materials, matProgress, loading: matLoading } = useChapterMaterials(chapterId, dataRefreshKey);
+  const { materials, matProgress, loading: matLoading } = useChapterMaterials(chapterId);
   const [pretestResult, setPretestResult] = useState<{ score: number; answers: Record<string, number> } | null>(null);
   const [posttestResult, setPosttestResult] = useState<{ score: number; answers: Record<string, number> } | null>(null);
 
-  // ── Teacher edit state ──
   const isTeacher = role === 'teacher' || role === 'admin';
   const teacherMode = isTeacher && isTeacherMode;
   const teacherView = isTeacher;
-  const [editTitle, setEditTitle] = useState('');
-  const [editSubtitle, setEditSubtitle] = useState('');
-  const [editDescription, setEditDescription] = useState('');
-  const [editCoverEmoji, setEditCoverEmoji] = useState('');
-  const [editCoverColor, setEditCoverColor] = useState('');
-  const [editing, setEditing] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
+
+  // ── Global loading: spinner sampai SEMUA data siap ──
+  const [pageReady, setPageReady] = useState(false);
+  useEffect(() => {
+    if (chLoading || matLoading) return;
+    const chapter = chapters.find(c => c.id === chapterId);
+    if (!chapter) { setPageReady(true); return; } // chapter not found — let fallback render handle it
+    // Progress may lag behind; give it one tick to arrive
+    const t = setTimeout(() => setPageReady(true), 80);
+    return () => clearTimeout(t);
+  }, [chLoading, matLoading, chapters, chapterId]);
 
   const chapter = chapters.find(c => c.id === chapterId);
   const cIdx = chapter ? chapters.findIndex(c => c.id === chapterId) : -1;
@@ -77,85 +86,258 @@ export default function ChapterClient() {
     ? (progress[chapterId] || { ...EMPTY_PROGRESS })
     : { ...EMPTY_PROGRESS };
 
-  // ── Init edit fields when chapter loads ──
+  // ── Batch edit state ──
+  const [editTitle, setEditTitle] = useState('');
+  const [editSubtitle, setEditSubtitle] = useState('');
+  const [editDescription, setEditDescription] = useState('');
+  const [editCoverEmoji, setEditCoverEmoji] = useState('');
+  const [editCoverColor, setEditCoverColor] = useState('');
+
+  const [editMaterials, setEditMaterials] = useState<(ChapterMaterial & { _tmp?: boolean })[]>([]);
+  const [editPretestEnabled, setEditPretestEnabled] = useState(false);
+  const [editPretestQuestions, setEditPretestQuestions] = useState<(MCQ & { _tmp?: boolean })[]>([]);
+  const [editPosttestEnabled, setEditPosttestEnabled] = useState(false);
+  const [editPosttestQuestions, setEditPosttestQuestions] = useState<(MCQ & { _tmp?: boolean })[]>([]);
+  const [editTasks, setEditTasks] = useState<(ChapterTask)[]>([]);
+  const [editPengayaanEnabled, setEditPengayaanEnabled] = useState(false);
+  const [editPengayaanText, setEditPengayaanText] = useState('');
+
+  const [saving, setSaving] = useState(false);
+  const [saveMsg, setSaveMsg] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [dataLoaded, setDataLoaded] = useState(false);
+
+  // ── Init edit state from DB data ──
   useEffect(() => {
-    if (chapter) {
-      setEditTitle(chapter.title);
-      setEditSubtitle(chapter.subtitle);
-      setEditDescription(chapter.description);
-      setEditCoverEmoji(chapter.coverEmoji);
-      setEditCoverColor(chapter.coverColor);
-    }
-  }, [chapter?.id]);
+    if (!chapter || !materials || dataLoaded) return;
+    setEditTitle(chapter.title);
+    setEditSubtitle(chapter.subtitle ?? '');
+    setEditDescription(chapter.description ?? '');
+    setEditCoverEmoji(chapter.coverEmoji);
+    setEditCoverColor(chapter.coverColor);
+    setEditMaterials(materials.map((m, i) => ({ ...m, sectionOrder: m.sectionOrder ?? i })));
+    setEditPretestEnabled(!!(chapter.preTest && chapter.preTest.length > 0));
+    setEditPretestQuestions(chapter.preTest?.map(q => ({ ...q })) ?? []);
+    setEditPosttestEnabled(!!(chapter.postTestMandatory && chapter.postTestMandatory.length > 0));
+    setEditPosttestQuestions(chapter.postTestMandatory?.map(q => ({ ...q })) ?? []);
+    setEditTasks(chapter.tasks ? chapter.tasks.map(t => ({ ...t, questions: t.questions.map(q => ({ ...q })) })) : []);
+    setEditPengayaanEnabled(!!chapter.postTestOptional);
+    setEditPengayaanText(chapter.postTestOptional?.instruction ?? '');
+    setDataLoaded(true);
+  }, [chapter, materials, dataLoaded]);
 
-  const refreshChapterData = () => setDataRefreshKey((key) => key + 1);
+  // ── Computed ──
+  const hasPreTest = chapter && chapter.preTest && chapter.preTest.length > 0;
+  const preTestStepDone = !hasPreTest || prog.pretest;
+  const materialStepDone = prog.materi || false;
+  const tasksAllDone = chapter && chapter.tasks.length === 0 || prog.tugas;
+  const postTestStepDone = prog.posttest || false;
+  const postTestUnlocked = teacherView || (materialStepDone && tasksAllDone);
+  const optionalUnlocked = teacherView || postTestStepDone;
+  const displayName = user?.displayName || user?.email?.split('@')[0] || 'Siswa';
 
-  const handleDeleteMaterial = async (materialId: string) => {
-    const ok = await deleteChapterMaterial(materialId);
-    if (ok) {
-      refreshChapterData();
-    } else {
-      alert('Gagal menghapus materi. Coba lagi.');
+  // ── Student handlers ──
+  const handlePreTestComplete = async (score: number, answers: Record<string, number>) => {
+    if (user) {
+      setPretestResult({ score, answers });
+      await markChapterStep(user.uid, chapterId, 'pretest');
+      await saveScore(user.uid, chapterId, 'pretest', score);
+      refreshProgress(user.uid);
     }
   };
 
-  const handleCreateMaterial = async (data: { type: Chapter['materials'][number]['type']; content: string; caption?: string | null }) => {
-    const ok = await createChapterMaterial(chapterId, data);
-    if (ok) {
-      refreshChapterData();
-    } else {
-      alert('Gagal menambah materi. Coba lagi.');
-    }
+  const handleMaterialDone = async () => {
+    if (!user) return;
+    await markChapterStep(user.uid, chapterId, 'materi');
+    refreshProgress(user.uid);
   };
 
-  const handleUpdateMaterial = async (materialId: string, data: { type: Chapter['materials'][number]['type']; content: string; caption?: string | null }) => {
-    const ok = await updateChapterMaterial(materialId, data);
-    if (ok) {
-      refreshChapterData();
-    } else {
-      alert('Gagal mengubah materi. Coba lagi.');
-    }
-  };
-
-  const handleSaveMetadata = async () => {
-    setSaveError(null);
-    if (!chapterReadyForStudent) {
-      setSaveError('Lengkapi pre-test, materi, tugas, dan post-test sebelum menyimpan bab untuk siswa.');
-      return;
-    }
-    setEditing(true);
-    const ok = await updateChapterMetadata(chapterId, {
-      title: editTitle,
-      subtitle: editSubtitle,
-      description: editDescription,
-      coverEmoji: editCoverEmoji,
-      coverColor: editCoverColor,
+  const handleTugasComplete = (taskIdx: number) => async (score: number, answers: Record<string, number>) => {
+    if (!user || !chapter) return;
+    await submitTaskAnswer(chapterId, taskIdx, user.uid, displayName, answers, score);
+    await saveScore(user.uid, chapterId, 'tugas', score);
+    const hasPendingTasks = chapter.tasks.some((task) => {
+      const submitted = (task.answer || []).some(a => a.userId === user.uid);
+      return !submitted;
     });
-    setEditing(false);
-    if (ok) {
-      setSaved(true);
-      refreshChapterData();
-      setTimeout(() => setSaved(false), 1800);
-    } else {
-      alert('Gagal menyimpan. Coba lagi.');
+    if (!hasPendingTasks || chapter.tasks.length === 1) {
+      await markChapterStep(user.uid, chapterId, 'tugas');
+    }
+    refreshProgress(user.uid);
+  };
+
+  const handlePostTestComplete = async (score: number, answers: Record<string, number>) => {
+    if (user) {
+      setPosttestResult({ score, answers });
+      await markChapterStep(user.uid, chapterId, 'posttest');
+      await saveScore(user.uid, chapterId, 'posttest', score);
+      refreshProgress(user.uid);
     }
   };
 
-  if (loading || matLoading) {
+  // ── Teacher: Material editors ──
+  const addMaterial = () => {
+    setEditMaterials(prev => [...prev, {
+      id: freshId('mat'), chapterId, sectionOrder: prev.length, type: 'text', content: '', caption: null, _tmp: true,
+    } as ChapterMaterial & { _tmp?: boolean }]);
+  };
+
+  const updateMaterial = (idx: number, patch: Partial<ChapterMaterial>) => {
+    setEditMaterials(prev => prev.map((m, i) => i === idx ? { ...m, ...patch } : m));
+  };
+
+  const removeMaterial = (idx: number) => {
+    setEditMaterials(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  // ── Teacher: Question editors (pretest/posttest) ──
+  const addQuestion = (setter: React.Dispatch<React.SetStateAction<(MCQ & { _tmp?: boolean })[]>>) => {
+    setter(prev => [...prev, {
+      id: freshId('q'), question: '', options: ['', '', '', ''], correctIndex: 0, _tmp: true,
+    }]);
+  };
+
+  const updateQuestion = (
+    setter: React.Dispatch<React.SetStateAction<(MCQ & { _tmp?: boolean })[]>>,
+    idx: number, patch: Partial<MCQ>,
+  ) => {
+    setter(prev => prev.map((q, i) => i === idx ? { ...q, ...patch } : q));
+  };
+
+  const removeQuestion = (
+    setter: React.Dispatch<React.SetStateAction<(MCQ & { _tmp?: boolean })[]>>,
+    idx: number,
+  ) => {
+    setter(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  // ── Teacher: Task editors ──
+  const addTask = () => {
+    setEditTasks(prev => [...prev, {
+      id: freshId('task'), title: '', description: '', dueDate: null, type: 'mcq', questions: [], answer: [],
+    }]);
+  };
+
+  const updateTask = (idx: number, patch: Partial<ChapterTask>) => {
+    setEditTasks(prev => prev.map((t, i) => i === idx ? { ...t, ...patch } as ChapterTask : t));
+  };
+
+  const removeTask = (idx: number) => {
+    setEditTasks(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  const addTaskQuestion = (taskIdx: number) => {
+    setEditTasks(prev => prev.map((t, i) => i === taskIdx ? {
+      ...t, questions: [...t.questions, { id: freshId('tq'), question: '', options: ['', '', '', ''], correctIndex: 0 }],
+    } as ChapterTask : t));
+  };
+
+  const updateTaskQuestion = (taskIdx: number, qIdx: number, patch: Partial<MCQ>) => {
+    setEditTasks(prev => prev.map((t, i) => i === taskIdx ? {
+      ...t, questions: t.questions.map((q, j) => j === qIdx ? { ...q, ...patch } : q),
+    } as ChapterTask : t));
+  };
+
+  const removeTaskQuestion = (taskIdx: number, qIdx: number) => {
+    setEditTasks(prev => prev.map((t, i) => i === taskIdx ? {
+      ...t, questions: t.questions.filter((_, j) => j !== qIdx),
+    } as ChapterTask : t));
+  };
+
+  // ── Save batch ──
+  const handleSaveAll = async () => {
+    setSaving(true);
+    setSaveMsg(null);
+
+    const result = await saveChapterBatch(chapterId, {
+      metadata: {
+        title: editTitle,
+        subtitle: editSubtitle,
+        description: editDescription,
+        cover_emoji: editCoverEmoji,
+        cover_color: editCoverColor,
+      },
+      pengayaan: { instruction: editPengayaanText, enabled: editPengayaanEnabled },
+      materials: editMaterials.map((m, i) => ({
+        id: m.id,
+        section_order: m.sectionOrder ?? i,
+        type: m.type,
+        content: m.content,
+        caption: m.caption,
+      })),
+      tasks: editTasks.map((t, i) => ({
+        id: t.id,
+        title: t.title,
+        description: t.description,
+        due_date: t.dueDate,
+        task_order: i,
+        questions: t.questions.map((q, qi) => ({
+          id: q.id,
+          question_order: qi,
+          question: q.question,
+          options: q.options,
+          correct_index: q.correctIndex,
+        })),
+      })),
+      pretest: editPretestEnabled ? editPretestQuestions.map((q, i) => ({
+        id: q.id,
+        question_order: i,
+        question: q.question,
+        options: q.options,
+        correct_index: q.correctIndex,
+      })) : [],
+      posttest: editPosttestEnabled ? editPosttestQuestions.map((q, i) => ({
+        id: q.id,
+        question_order: i,
+        question: q.question,
+        options: q.options,
+        correct_index: q.correctIndex,
+      })) : [],
+    });
+
+    setSaving(false);
+    if (result.ok) {
+      setSaveMsg('✅ Bab berhasil disimpan');
+      setTimeout(() => { setSaveMsg(null); router.push('/materi'); }, 1500);
+    } else {
+      setSaveMsg(result.message || 'Gagal menyimpan perubahan.');
+      setTimeout(() => setSaveMsg(null), 4000);
+    }
+  };
+
+  // ── Delete chapter ──
+  const handleDelete = async () => {
+    if (!confirmDelete) { setConfirmDelete(true); return; }
+    setDeleting(true);
+    const result = await deleteChapter(chapterId);
+    if (result.ok) {
+      router.push('/materi');
+    }
+  };
+
+  // ═══════════════════════════════════════════
+  // GLOBAL LOADING — spinner sampai semua siap
+  // ═══════════════════════════════════════════
+  if (!pageReady) {
     return (
       <div className="max-w-2xl mx-auto flex items-center justify-center min-h-[300px]">
-        <div className="w-8 h-8 border-2 border-[#e8efe4] border-t-[#1F3D30] rounded-full animate-spin" />
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-2 border-[#e8efe4] border-t-[#1F3D30] rounded-full animate-spin" />
+          <p className="text-xs text-[#5C7A6E]">Memuat data...</p>
+        </div>
       </div>
     );
   }
 
+  // ── Page-ready fallback states ──
   if (!chapter) {
     if (chapters.length === 0) {
       return (
         <div className="max-w-2xl mx-auto text-center py-16 space-y-4">
           <span className="text-6xl">📭</span>
           <h1 className="text-xl font-bold">Belum Ada Materi</h1>
-          <p className="text-sm text-[#5C7A6E]">Database masih kosong. Kembali ke dashboard untuk mengisi materi.</p>
+          <p className="text-sm text-[#5C7A6E]">Database masih kosong.</p>
           <Link href="/dashboard" className="inline-flex items-center gap-2 px-4 py-2 bg-[#1F3D30] text-white rounded-xl text-sm font-semibold hover:bg-[#2A5A44] transition-colors">
             ← Kembali ke Dashboard
           </Link>
@@ -189,90 +371,21 @@ export default function ChapterClient() {
     );
   }
 
-  // ── Computed ──
-  const hasPreTest = !!chapter.preTest && chapter.preTest.length > 0;
-  const preTestStepDone = prog.pretest;
-  const materialStepDone = prog.materi || false;
-  const tasksAllDone = prog.tugas;
-  const postTestStepDone = prog.posttest || false;
-  const postTestUnlocked = teacherView || materialStepDone && tasksAllDone;
-  const optionalUnlocked = teacherView || postTestStepDone;
-  const displayName = user?.displayName || user?.email?.split('@')[0] || 'Siswa';
-  const hasMaterials = materials.length > 0;
-  const hasTasks = chapter.tasks.length > 0;
-  const tasksHaveQuestions = hasTasks && chapter.tasks.every((task) => task.questions.length > 0);
-  const hasPostTest = chapter.postTestMandatory.length > 0;
-  const chapterReadyForStudent = hasPreTest && hasMaterials && tasksHaveQuestions && hasPostTest;
-  const readinessItems = [
-    { label: 'Pre-test', done: hasPreTest },
-    { label: 'Materi', done: hasMaterials },
-    { label: 'Tugas + soal', done: tasksHaveQuestions },
-    { label: 'Post-test', done: hasPostTest },
-  ];
-
-  // ── Handlers ──
-  const handlePreTestComplete = async (score: number, answers: Record<string, number>) => {
-    if (user) {
-      setPretestResult({ score, answers });
-      await markChapterStep(user.uid, chapterId, 'pretest');
-      await saveScore(user.uid, chapterId, 'pretest', score);
-      refreshProgress(user.uid);
-    }
-  };
-
-  const handleMaterialDone = async () => {
-    if (!user || materials.length === 0) return;
-    await Promise.all(materials.map((material) => markMaterialViewed(user.uid, material.id)));
-    await markChapterStep(user.uid, chapterId, 'materi');
-    refreshChapterData();
-    refreshProgress(user.uid);
-  };
-
-  const handleTugasComplete = (taskIdx: number) => async (score: number, answers: Record<string, number>) => {
-    if (user) {
-      await submitTaskAnswer(chapterId, taskIdx, user.uid, displayName, answers, score);
-      await saveScore(user.uid, chapterId, 'tugas', score);
-
-      const allTasksSubmitted = chapter.tasks.every((task, index) => (
-        index === taskIdx || (task.answer || []).some(a => a.userId === user.uid)
-      ));
-      if (allTasksSubmitted) {
-        await markChapterStep(user.uid, chapterId, 'tugas');
-      }
-      refreshChapterData();
-      refreshProgress(user.uid);
-    }
-  };
-
-  const handlePostTestComplete = async (score: number, answers: Record<string, number>) => {
-    if (user) {
-      await saveScore(user.uid, chapterId, 'posttest', score);
-      if (score >= 70) {
-        setPosttestResult({ score, answers });
-        await markChapterStep(user.uid, chapterId, 'posttest');
-        refreshProgress(user.uid);
-      }
-    }
-  };
-
-  return (
-    <div className="max-w-2xl mx-auto space-y-5 pb-8">
-      <div className="flex items-center justify-between">
-        <Link href="/materi" className="inline-flex items-center gap-1.5 text-sm text-[#5C7A6E] hover:text-[#1F3D30]">
-          ← Kembali ke Materi
-        </Link>
-        {isTeacher && !teacherMode && (
-          <Link href={`/materi/${chapterId}?teacher=true`}
-            className="text-xs font-semibold text-[#1F3D30] hover:underline">
-            ✏️ Edit Bab
+  // ═══════════════════════════════════════════
+  // TEACHER EDIT MODE (batch-save)
+  // ═══════════════════════════════════════════
+  if (teacherMode) {
+    return (
+      <div className="max-w-2xl mx-auto space-y-5 pb-8">
+        <div className="flex items-center justify-between">
+          <Link href="/materi" className="inline-flex items-center gap-1.5 text-sm text-[#5C7A6E] hover:text-[#1F3D30]">
+            ← Kembali ke Materi
           </Link>
-        )}
-      </div>
+        </div>
 
-      {/* Chapter Header */}
-      <div className={`rounded-2xl bg-gradient-to-br ${teacherMode ? editCoverColor : chapter.coverColor} p-5`}>
-        <p className="text-xs font-bold uppercase tracking-wide text-[#1F3D30]/60">Bab {cIdx + 1}</p>
-        {teacherMode ? (
+        {/* ── Chapter Metadata ── */}
+        <div className={`rounded-2xl bg-gradient-to-br ${editCoverColor || 'from-green-100 to-emerald-200'} p-5`}>
+          <p className="text-xs font-bold uppercase tracking-wide text-[#1F3D30]/60">Bab {cIdx + 1} — Edit Mode</p>
           <div className="space-y-3 mt-2">
             <div>
               <label className="text-[10px] font-semibold uppercase text-[#1F3D30]/50">Cover Emoji</label>
@@ -295,48 +408,208 @@ export default function ChapterClient() {
                 className="block w-full px-3 py-2 text-sm border border-[#1F3D30]/20 rounded-lg bg-white/60 mt-0.5 resize-none" />
             </div>
             <div>
-              <label className="text-[10px] font-semibold uppercase text-[#1F3D30]/50">Warna Cover (Tailwind gradient)</label>
-              <input value={editCoverColor} onChange={e => setEditCoverColor(e.target.value)}
-                className="block w-full px-3 py-2 text-sm border border-[#1F3D30]/20 rounded-lg bg-white/60 mt-0.5"
-                placeholder="from-green-100 to-emerald-200" />
+              <label className="text-[10px] font-semibold uppercase text-[#1F3D30]/50">Warna Cover</label>
+              <div className="flex flex-wrap gap-2 mt-1">
+                {[
+                  ['from-green-100 to-emerald-200', '🟢'],
+                  ['from-emerald-100 to-teal-200', '💚'],
+                  ['from-orange-100 to-amber-200', '🟠'],
+                  ['from-violet-100 to-purple-200', '🟣'],
+                  ['from-rose-100 to-pink-200', '🌸'],
+                  ['from-sky-100 to-blue-200', '🔵'],
+                  ['from-amber-100 to-yellow-200', '💛'],
+                  ['from-gray-100 to-slate-200', '⚪'],
+                ].map(([color, emoji]) => (
+                  <button key={color} onClick={() => setEditCoverColor(color)}
+                    className={`w-8 h-8 rounded-xl flex items-center justify-center text-xs border-2 transition-all ${
+                      editCoverColor === color ? 'border-[#1F3D30] scale-110 shadow-sm' : 'border-transparent hover:scale-105'
+                    }`}
+                    style={{ background: `linear-gradient(to bottom right, ${color.replace('from-', '').replace(' to-', ', ').replace(/-/g, ' ').replace(/\d+/g, '').trim()})` }}>
+                    <span className="drop-shadow-sm">{emoji}</span>
+                  </button>
+                ))}
+              </div>
             </div>
-            <button onClick={handleSaveMetadata} disabled={editing || !chapterReadyForStudent}
-              className="px-4 py-2 bg-[#1F3D30] text-white rounded-xl text-sm font-semibold hover:bg-[#2A5A44] transition-colors disabled:opacity-50">
-              {editing ? 'Menyimpan...' : saved ? '✅ Tersimpan!' : chapterReadyForStudent ? '💾 Simpan Metadata' : 'Lengkapi Bab Dulu'}
+          </div>
+        </div>
+
+        {/* ── Materials Section Editor ── */}
+        <div className="bg-white rounded-2xl border border-[#1F3D30]/5 p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-bold text-[#1F3D30]">📚 Materi (Section)</h3>
+            <button onClick={addMaterial}
+              className="px-3 py-1.5 text-xs font-semibold bg-[#1F3D30] text-white rounded-lg hover:bg-[#2A5A44]">+ Tambah Section</button>
+          </div>
+          <div className="space-y-3">
+            {editMaterials.map((mat, i) => (
+              <div key={mat.id} className="border border-[#1F3D30]/10 rounded-xl p-3 bg-[#FBF8F4]">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[10px] font-bold uppercase text-[#5C7A6E]">Section {i + 1}</span>
+                  <button onClick={() => removeMaterial(i)}
+                    className="text-xs text-red-500 hover:text-red-700 font-semibold">🗑️ Hapus</button>
+                </div>
+                <div className="flex gap-2 mb-2">
+                  {['text', 'image', 'video', 'embed'].map(t => (
+                    <button key={t} onClick={() => updateMaterial(i, { type: t as ChapterMaterial['type'] })}
+                      className={`px-2 py-1 text-[10px] font-semibold rounded-lg border transition-colors ${
+                        mat.type === t ? 'bg-[#1F3D30] text-white border-[#1F3D30]' : 'bg-white text-[#5C7A6E] border-[#d4dcd0]'
+                      }`}>{t}</button>
+                  ))}
+                </div>
+                {mat.type === 'text' ? (
+                  <textarea value={mat.content} onChange={e => updateMaterial(i, { content: e.target.value })}
+                    rows={3} className="w-full px-3 py-2 text-sm border border-[#d4dcd0] rounded-lg resize-none"
+                    placeholder="Markdown content..." />
+                ) : (
+                  <input value={mat.content} onChange={e => updateMaterial(i, { content: e.target.value })}
+                    className="w-full px-3 py-2 text-sm border border-[#d4dcd0] rounded-lg" placeholder="URL..." />
+                )}
+                {mat.type !== 'text' && (
+                  <input value={mat.caption ?? ''} onChange={e => updateMaterial(i, { caption: e.target.value || null })}
+                    className="w-full px-3 py-2 text-sm border border-[#d4dcd0] rounded-lg mt-2" placeholder="Caption (optional)" />
+                )}
+              </div>
+            ))}
+            {editMaterials.length === 0 && (
+              <p className="text-xs text-[#8A9E95] text-center py-4">Belum ada materi. Klik &quot;+ Tambah Section&quot; untuk mulai.</p>
+            )}
+          </div>
+        </div>
+
+        {/* ── Pre-Test Editor ── */}
+        <TeacherQuestionEditor
+          title="📝 Pre-Test"
+          disabledMessage="Pre-test dinonaktifkan. Siswa akan langsung masuk ke materi."
+          enabled={editPretestEnabled}
+          onToggle={() => setEditPretestEnabled(!editPretestEnabled)}
+          questions={editPretestQuestions}
+          onAdd={() => addQuestion(setEditPretestQuestions)}
+          onUpdate={(i, p) => updateQuestion(setEditPretestQuestions, i, p)}
+          onRemove={i => removeQuestion(setEditPretestQuestions, i)}
+        />
+
+        {/* ── Post-Test Editor ── */}
+        <TeacherQuestionEditor
+          title="📝 Post-Test Wajib"
+          disabledMessage="Post-test dinonaktifkan. Siswa akan menyelesaikan bab tanpa post-test."
+          enabled={editPosttestEnabled}
+          onToggle={() => setEditPosttestEnabled(!editPosttestEnabled)}
+          questions={editPosttestQuestions}
+          onAdd={() => addQuestion(setEditPosttestQuestions)}
+          onUpdate={(i, p) => updateQuestion(setEditPosttestQuestions, i, p)}
+          onRemove={i => removeQuestion(setEditPosttestQuestions, i)}
+        />
+
+        {/* ── Tugas Editor ── */}
+        <div className="bg-white rounded-2xl border border-[#1F3D30]/5 p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-bold text-[#1F3D30]">📋 Tugas (Soal Esai/MCQ)</h3>
+            <button onClick={addTask}
+              className="px-3 py-1.5 text-xs font-semibold bg-[#1F3D30] text-white rounded-lg hover:bg-[#2A5A44]">+ Tambah Tugas</button>
+          </div>
+          <div className="space-y-4">
+            {editTasks.map((task, ti) => (
+              <div key={task.id} className="border border-[#1F3D30]/10 rounded-xl p-3 bg-[#FBF8F4]">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[10px] font-bold uppercase text-[#5C7A6E]">Tugas {ti + 1}</span>
+                  <button onClick={() => removeTask(ti)}
+                    className="text-xs text-red-500 hover:text-red-700 font-semibold">🗑️ Hapus Tugas</button>
+                </div>
+                <div className="space-y-2">
+                  <input value={task.title} onChange={e => updateTask(ti, { title: e.target.value })}
+                    className="w-full px-3 py-2 text-sm border border-[#d4dcd0] rounded-lg" placeholder="Judul tugas" />
+                  <textarea value={task.description} onChange={e => updateTask(ti, { description: e.target.value })}
+                    rows={2} className="w-full px-3 py-2 text-sm border border-[#d4dcd0] rounded-lg resize-none" placeholder="Deskripsi tugas" />
+                  <input type="date" value={task.dueDate ?? ''} onChange={e => updateTask(ti, { dueDate: e.target.value || null })}
+                    className="w-full px-3 py-2 text-sm border border-[#d4dcd0] rounded-lg" />
+                </div>
+                <div className="mt-3 space-y-2">
+                  <span className="text-[10px] font-bold uppercase text-[#5C7A6E] block">Soal Tugas ({task.questions.length})</span>
+                  {task.questions.map((q, qi) => (
+                    <TeacherQuestionItem key={q.id} idx={qi}
+                      question={q}
+                      onChange={(patch) => updateTaskQuestion(ti, qi, patch)}
+                      onRemove={() => removeTaskQuestion(ti, qi)}
+                    />
+                  ))}
+                  <button onClick={() => addTaskQuestion(ti)}
+                    className="text-xs text-[#1F3D30] font-semibold hover:underline">+ Tambah Soal</button>
+                </div>
+              </div>
+            ))}
+            {editTasks.length === 0 && (
+              <p className="text-xs text-[#8A9E95] text-center py-4">Belum ada tugas.</p>
+            )}
+          </div>
+        </div>
+
+        {/* ── Pengayaan Editor ── */}
+        <div className="bg-white rounded-2xl border border-[#1F3D30]/5 p-5">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-bold text-[#1F3D30]">🌟 Tugas Pengayaan (Opsional)</h3>
+            <button onClick={() => setEditPengayaanEnabled(!editPengayaanEnabled)}
+              className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition-colors ${
+                editPengayaanEnabled ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'
+              }`}>
+              {editPengayaanEnabled ? 'Aktif' : 'Nonaktif'}
             </button>
           </div>
-        ) : (
-          <>
-            <h1 className="text-xl lg:text-2xl font-bold mt-1">{chapter.title}</h1>
-            <p className="text-sm text-[#1F3D30]/70 mt-1">{chapter.subtitle}</p>
-          </>
+          {editPengayaanEnabled && (
+            <textarea value={editPengayaanText} onChange={e => setEditPengayaanText(e.target.value)}
+              rows={5} className="w-full px-3 py-2 text-sm border border-[#d4dcd0] rounded-lg resize-none"
+              placeholder="### Tugas Pengayaan...&#10;&#10;Tulis instruksi tugas pengayaan di sini (markdown)." />
+          )}
+        </div>
+
+        {/* ── Save / Delete ── */}
+        <div className="bg-white rounded-2xl border border-[#1F3D30]/5 p-4">
+          <div className="flex items-center gap-3">
+            <button onClick={handleDelete} disabled={deleting}
+              className={`px-4 py-2 rounded-xl text-sm font-semibold transition-colors ${
+                confirmDelete ? 'bg-red-600 text-white animate-pulse' : 'bg-red-50 text-red-600 hover:bg-red-100'
+              }`}>
+              {deleting ? 'Menghapus...' : confirmDelete ? 'Klik lagi untuk konfirmasi' : '🗑️ Hapus Bab Ini'}
+            </button>
+            <div className="flex-1" />
+            <button onClick={handleSaveAll} disabled={saving}
+              className="px-6 py-2.5 bg-[#1F3D30] text-white rounded-xl text-sm font-semibold hover:bg-[#2A5A44] transition-colors disabled:opacity-50 flex items-center gap-2">
+              {saving ? '⏳ Menyimpan...' : '💾 Simpan Perubahan'}
+            </button>
+          </div>
+          {saveMsg && (
+            <div className="mt-2 text-center text-xs font-medium"
+              style={{ color: saveMsg.startsWith('✅') ? '#059669' : '#dc2626' }}>
+              {saveMsg}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ═══════════════════════════════════════════
+  // STUDENT / VIEW MODE
+  // ═══════════════════════════════════════════
+  return (
+    <div className="max-w-2xl mx-auto space-y-5 pb-8">
+      <div className="flex items-center justify-between">
+        <Link href="/materi" className="inline-flex items-center gap-1.5 text-sm text-[#5C7A6E] hover:text-[#1F3D30]">
+          ← Kembali ke Materi
+        </Link>
+        {isTeacher && !teacherMode && (
+          <Link href={`/materi/${chapterId}?teacher=true`}
+            className="text-xs font-semibold text-[#1F3D30] hover:underline">
+            ✏️ Edit Bab
+          </Link>
         )}
       </div>
 
-      {isTeacher && (
-        <div className="rounded-2xl border border-[#1F3D30]/5 bg-white p-4 space-y-3">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-sm font-bold text-[#1F3D30]">Kesiapan Bab untuk Siswa</p>
-              <p className="text-xs text-[#5C7A6E] mt-0.5">Guru dan siswa melihat konteks bab yang sama. Progress siswa tidak berlaku untuk guru.</p>
-            </div>
-            <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${chapterReadyForStudent ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
-              {chapterReadyForStudent ? 'Siap' : 'Draft'}
-            </span>
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-            {readinessItems.map((item) => (
-              <div key={item.label} className={`rounded-xl px-3 py-2 text-xs font-semibold ${item.done ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
-                {item.done ? '✓' : '○'} {item.label}
-              </div>
-            ))}
-          </div>
-          {!chapterReadyForStudent && (
-            <p className="text-xs text-[#8A6D2B]">Lengkapi semua bagian sebelum bab dianggap siap dipakai siswa.</p>
-          )}
-          {saveError && <p className="text-xs font-medium text-red-600">{saveError}</p>}
-        </div>
-      )}
+      {/* Chapter Header */}
+      <div className={`rounded-2xl bg-gradient-to-br ${chapter.coverColor} p-5`}>
+        <p className="text-xs font-bold uppercase tracking-wide text-[#1F3D30]/60">Bab {cIdx + 1}</p>
+        <h1 className="text-xl lg:text-2xl font-bold mt-1">{chapter.title}</h1>
+        <p className="text-sm text-[#1F3D30]/70 mt-1">{chapter.subtitle}</p>
+      </div>
 
       {/* Pre-test */}
       {hasPreTest ? (
@@ -352,7 +625,7 @@ export default function ChapterClient() {
           )}
         </SectionCard>
       ) : (
-        <SectionCard step={1} title="Pre-Test Belum Dikonfigurasi" description="Bab belum siap untuk siswa karena pre-test wajib belum tersedia." done={false} unlocked={teacherView} />
+        <SectionCard step={1} title="Tanpa Pre-Test" description="Guru tidak mengaktifkan pre-test untuk bab ini." done={true} unlocked={true} />
       )}
 
       {/* Materi */}
@@ -363,15 +636,12 @@ export default function ChapterClient() {
           matProgress={matProgress}
           materialStepDone={materialStepDone}
           onMaterialDone={handleMaterialDone}
-          isTeacher={teacherMode}
-          onDeleteMaterial={handleDeleteMaterial}
-          onCreateMaterial={handleCreateMaterial}
-          onUpdateMaterial={handleUpdateMaterial}
+          isTeacher={false}
         />
       </SectionCard>
 
       {/* Tugas */}
-      {chapter.tasks.length > 0 ? (
+      {chapter.tasks.length > 0 && (
         <SectionCard step={hasPreTest ? 3 : 2} title="Tugas" description={teacherView ? "Preview tugas siswa untuk bab ini." : "Kerjakan tugas berikut untuk melanjutkan."} done={teacherView ? true : tasksAllDone} unlocked={teacherView || materialStepDone}>
           <div className="ml-11 space-y-4">
             {chapter.tasks.map((task, tIdx) => (
@@ -392,8 +662,6 @@ export default function ChapterClient() {
             ))}
           </div>
         </SectionCard>
-      ) : (
-        <SectionCard step={hasPreTest ? 3 : 2} title="Tugas Belum Dikonfigurasi" description="Bab belum siap untuk siswa karena tugas wajib belum tersedia." done={false} unlocked={teacherView || materialStepDone} />
       )}
 
       {/* Post-test Wajib */}
@@ -428,7 +696,82 @@ export default function ChapterClient() {
   );
 }
 
-// ── Pengayaan sub-component ──
+// ── Teacher Question Editor Sub-components ──
+
+function TeacherQuestionEditor({ title, disabledMessage, enabled, onToggle, questions, onAdd, onUpdate, onRemove }: {
+  title: string;
+  disabledMessage: string;
+  enabled: boolean;
+  onToggle: () => void;
+  questions: (MCQ & { _tmp?: boolean })[];
+  onAdd: () => void;
+  onUpdate: (idx: number, patch: Partial<MCQ>) => void;
+  onRemove: (idx: number) => void;
+}) {
+  return (
+    <div className="bg-white rounded-2xl border border-[#1F3D30]/5 p-5">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-bold text-[#1F3D30]">{title}</h3>
+        <div className="flex items-center gap-2">
+          <button onClick={onAdd}
+            className="px-3 py-1.5 text-xs font-semibold bg-[#1F3D30] text-white rounded-lg hover:bg-[#2A5A44]">+ Tambah Soal</button>
+          <button onClick={onToggle}
+            className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition-colors ${
+              enabled ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'
+            }`}>
+            {enabled ? 'Aktif' : 'Nonaktif'}
+          </button>
+        </div>
+      </div>
+      {enabled ? (
+        <div className="space-y-3">
+          {questions.map((q, i) => (
+            <TeacherQuestionItem key={q.id} idx={i} question={q} onChange={p => onUpdate(i, p)} onRemove={() => onRemove(i)} />
+          ))}
+          {questions.length === 0 && (
+            <p className="text-xs text-[#8A9E95] text-center py-2">Belum ada soal. Klik &quot;+ Tambah Soal&quot; untuk mulai.</p>
+          )}
+        </div>
+      ) : (
+        <p className="text-xs text-[#8A9E95]">{disabledMessage}</p>
+      )}
+    </div>
+  );
+}
+
+function TeacherQuestionItem({ idx, question, onChange, onRemove }: {
+  idx: number;
+  question: MCQ;
+  onChange: (patch: Partial<MCQ>) => void;
+  onRemove: () => void;
+}) {
+  return (
+    <div className="border border-[#1F3D30]/10 rounded-xl p-3 bg-[#FBF8F4]">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-[10px] font-bold uppercase text-[#5C7A6E]">Soal {idx + 1}</span>
+        <button onClick={onRemove} className="text-xs text-red-500 hover:text-red-700 font-semibold">🗑️ Hapus</button>
+      </div>
+      <input value={question.question} onChange={e => onChange({ question: e.target.value })}
+        className="w-full px-3 py-2 text-sm border border-[#d4dcd0] rounded-lg mb-2" placeholder="Teks pertanyaan..." />
+      <div className="grid grid-cols-2 gap-2">
+        {question.options.map((opt, oi) => (
+          <div key={oi} className="flex items-center gap-1.5">
+            <input type="radio" checked={question.correctIndex === oi}
+              onChange={() => onChange({ correctIndex: oi })}
+              className="accent-[#1F3D30]" />
+            <input value={opt} onChange={e => {
+              const newOpts = [...question.options];
+              newOpts[oi] = e.target.value;
+              onChange({ options: newOpts });
+            }} className="flex-1 px-2 py-1.5 text-sm border border-[#d4dcd0] rounded-lg" placeholder={`Opsi ${String.fromCharCode(65 + oi)}`} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Pengayaan Sub-component ──
 function PengayaanSection({ step, chapterId, postTestOptional, unlocked, user, displayName, teacherView }: {
   step: number;
   chapterId: string;
