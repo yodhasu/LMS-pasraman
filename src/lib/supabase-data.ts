@@ -668,23 +668,21 @@ export function computeTaskInbox(
 
     if (chapter.postTestOptional) {
       const myAnswer = chapter.postTestOptional.answer?.find(a => a.userId === userId);
-      if (myAnswer) {
-        items.push({
-          chapterId: chapter.id,
-          chapterTitle: chapter.title,
-          task: {
-            id: `opt-${chapter.id}`,
-            title: 'Tugas Pengayaan: ' + chapter.title,
-            description: chapter.postTestOptional.instruction,
-            dueDate: null,
-            type: 'mcq',
-            questions: [],
-            answer: [],
-          },
-          status: 'submitted',
-          score: null,
-        });
-      }
+      items.push({
+        chapterId: chapter.id,
+        chapterTitle: chapter.title,
+        task: {
+          id: `opt-${chapter.id}`,
+          title: 'Tugas Pengayaan: ' + chapter.title,
+          description: chapter.postTestOptional.instruction,
+          dueDate: null,
+          type: 'mcq',
+          questions: [],
+          answer: [],
+        },
+        status: myAnswer ? 'submitted' : 'pending',
+        score: null,
+      });
     }
   }
   return items;
