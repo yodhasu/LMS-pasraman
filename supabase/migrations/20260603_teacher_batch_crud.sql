@@ -71,8 +71,15 @@ begin
     end loop;
   end if;
 
-  -- 4. Tasks + questions — delete all, reinsert
-  delete from public.chapter_tasks where chapter_id = p_chapter_id;
+  -- 4. Tasks + questions — preserve submissions, upsert existing
+  -- Only delete tasks that are BOTH: not in payload AND have no submissions
+  delete from public.chapter_tasks where chapter_id = p_chapter_id
+    and id not in (select value->>'id' from jsonb_array_elements(p_tasks) where value->>'id' is not null)
+    and not exists (select 1 from public.task_submissions where task_id = chapter_tasks.id);
+  -- Clean up orphaned questions for deleted tasks
+  delete from public.mcq_questions where chapter_id = p_chapter_id and assessment = 'tugas'
+    and task_id is not null
+    and task_id not in (select id from public.chapter_tasks where chapter_id = p_chapter_id);
   
   if jsonb_array_length(p_tasks) > 0 then
     for v_task in select * from jsonb_array_elements(p_tasks)
@@ -85,7 +92,15 @@ begin
         v_task->>'description',
         nullif(v_task->>'due_date', '')::date,
         (v_task->>'task_order')::int
-      );
+      )
+      on conflict (id) do update set
+        title = v_task->>'title',
+        description = v_task->>'description',
+        due_date = nullif(v_task->>'due_date', '')::date,
+        task_order = (v_task->>'task_order')::int;
+      
+      -- Re-insert questions for this task (safe: questions aren't student data)
+      delete from public.mcq_questions where chapter_id = p_chapter_id and task_id = v_task->>'id' and assessment = 'tugas';
       
       if v_task ? 'questions' and jsonb_array_length(v_task->'questions') > 0 then
         for v_question in select * from jsonb_array_elements(v_task->'questions')

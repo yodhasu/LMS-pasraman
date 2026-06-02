@@ -130,22 +130,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signIn = async (username: string, password: string) => {
-    // Client-side rate limiting: max 5 attempts in 60s
+    // Client-side rate limiting: max 5 failed attempts, then 60s lockout
+    // Counter only increments on FAILURE, so attempt #6 is the first blocked one
     const now = Date.now();
     if (now < loginBlockedUntil.current) {
       const remaining = Math.ceil((loginBlockedUntil.current - now) / 1000);
       throw new Error(`Too many attempts. Coba lagi dalam ${remaining} detik.`);
     }
-    loginAttempts.current += 1;
-    if (loginAttempts.current >= 5) {
-      loginBlockedUntil.current = now + 60_000;
-      loginAttempts.current = 0;
-      throw new Error('Too many failed attempts. Akun terkunci sementara 60 detik.');
-    }
     // Resolve username → email via RPC (bcrypt-verified)
     const { verifyUsernamePassword } = await import('@/lib/supabase-data');
     const result = await verifyUsernamePassword(username, password);
-    if (!result) throw new Error('Username atau password salah');
+    if (!result) {
+      // Failed attempt — increment counter
+      loginAttempts.current += 1;
+      if (loginAttempts.current >= 5) {
+        loginBlockedUntil.current = now + 60_000;
+        loginAttempts.current = 0;
+        throw new Error('Too many failed attempts. Akun terkunci sementara 60 detik.');
+      }
+      throw new Error('Username atau password salah');
+    }
     // Successful login — reset rate limiter
     loginAttempts.current = 0;
     loginBlockedUntil.current = 0;

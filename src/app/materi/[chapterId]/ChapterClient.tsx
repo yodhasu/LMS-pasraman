@@ -42,9 +42,15 @@ const EMPTY_PROGRESS: ChapterProgressDetail = {
 
 // ── Helpers ──
 let idCounter = 0;
-function freshId(prefix = 'tmp'): string {
-  idCounter++;
-  return `${prefix}_${Date.now()}_${idCounter}`;
+function uuid(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = (Date.now() + idCounter * 1000) % 16 | 0;
+    idCounter++;
+    return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+  });
+}
+function freshId(): string {
+  return uuid();
 }
 
 export default function ChapterClient() {
@@ -182,7 +188,7 @@ export default function ChapterClient() {
   // ── Teacher: Material editors ──
   const addMaterial = () => {
     setEditMaterials(prev => [...prev, {
-      id: freshId('mat'), chapterId, sectionOrder: prev.length, type: 'text', content: '', caption: null, _tmp: true,
+      id: freshId(), chapterId, sectionOrder: prev.length, type: 'text', content: '', caption: null, _tmp: true,
     } as ChapterMaterial & { _tmp?: boolean }]);
   };
 
@@ -197,7 +203,7 @@ export default function ChapterClient() {
   // ── Teacher: Question editors (pretest/posttest) ──
   const addQuestion = (setter: React.Dispatch<React.SetStateAction<(MCQ & { _tmp?: boolean })[]>>) => {
     setter(prev => [...prev, {
-      id: freshId('q'), question: '', options: ['', '', '', ''], correctIndex: 0, _tmp: true,
+      id: freshId(), question: '', options: ['', '', '', ''], correctIndex: 0, _tmp: true,
     }]);
   };
 
@@ -218,7 +224,7 @@ export default function ChapterClient() {
   // ── Teacher: Task editors ──
   const addTask = () => {
     setEditTasks(prev => [...prev, {
-      id: freshId('task'), title: '', description: '', dueDate: null, type: 'mcq', questions: [], answer: [],
+      id: freshId(), title: '', description: '', dueDate: null, type: 'mcq', questions: [], answer: [],
     }]);
   };
 
@@ -232,7 +238,7 @@ export default function ChapterClient() {
 
   const addTaskQuestion = (taskIdx: number) => {
     setEditTasks(prev => prev.map((t, i) => i === taskIdx ? {
-      ...t, questions: [...t.questions, { id: freshId('tq'), question: '', options: ['', '', '', ''], correctIndex: 0 }],
+      ...t, questions: [...t.questions, { id: freshId(), question: '', options: ['', '', '', ''], correctIndex: 0 }],
     } as ChapterTask : t));
   };
 
