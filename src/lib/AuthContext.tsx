@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, ReactNode, useRef } from 'react';
 import { User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 
@@ -87,6 +87,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<LmsUser | null>(null);
   const [role, setRole] = useState<AppRole | null>(null);
   const [loading, setLoading] = useState(true);
+  const loginAttempts = useRef(0);
+  const loginBlockedUntil = useRef(0);
 
   useEffect(() => {
     let active = true;
@@ -128,10 +130,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signIn = async (username: string, password: string) => {
+    // Client-side rate limiting: max 5 attempts in 60s
+    const now = Date.now();
+    if (now < loginBlockedUntil.current) {
+      const remaining = Math.ceil((loginBlockedUntil.current - now) / 1000);
+      throw new Error(`Too many attempts. Coba lagi dalam ${remaining} detik.`);
+    }
+    loginAttempts.current += 1;
+    if (loginAttempts.current >= 5) {
+      loginBlockedUntil.current = now + 60_000;
+      loginAttempts.current = 0;
+      throw new Error('Too many failed attempts. Akun terkunci sementara 60 detik.');
+    }
     // Resolve username → email via RPC (bcrypt-verified)
     const { verifyUsernamePassword } = await import('@/lib/supabase-data');
     const result = await verifyUsernamePassword(username, password);
     if (!result) throw new Error('Username atau password salah');
+    // Successful login — reset rate limiter
+    loginAttempts.current = 0;
+    loginBlockedUntil.current = 0;
     const { error } = await supabase.auth.signInWithPassword({ email: result.email, password });
     if (error) throw error;
   };

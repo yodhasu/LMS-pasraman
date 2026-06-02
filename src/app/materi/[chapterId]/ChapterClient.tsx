@@ -157,11 +157,14 @@ export default function ChapterClient() {
     if (!user || !chapter) return;
     await submitTaskAnswer(chapterId, taskIdx, user.uid, displayName, answers, score);
     await saveScore(user.uid, chapterId, 'tugas', score);
-    const hasPendingTasks = chapter.tasks.some((task) => {
-      const submitted = (task.answer || []).some(a => a.userId === user.uid);
-      return !submitted;
+    // Check remaining tasks (skip taskIdx — just submitted) using stale chapter data.
+    // Even if chapter.tasks hasn't refreshed, taskIdx is definitively submitted now,
+    // so any other task without an answer from this user is truly pending.
+    const hasOtherPending = chapter.tasks.some((task, i) => {
+      if (i === taskIdx) return false;
+      return !(task.answer || []).some(a => a.userId === user.uid);
     });
-    if (!hasPendingTasks || chapter.tasks.length === 1) {
+    if (!hasOtherPending) {
       await markChapterStep(user.uid, chapterId, 'tugas');
     }
     refreshProgress(user.uid);
@@ -636,7 +639,7 @@ export default function ChapterClient() {
           matProgress={matProgress}
           materialStepDone={materialStepDone}
           onMaterialDone={handleMaterialDone}
-          isTeacher={false}
+          isTeacher={teacherView}
         />
       </SectionCard>
 
