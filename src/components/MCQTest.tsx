@@ -111,7 +111,7 @@ export default function MCQTest({ questions, type = 'post', onComplete }: Props)
                   name={q.id}
                   checked={answers[q.id] === oi}
                   onChange={() => setAnswers({ ...answers, [q.id]: oi })}
-                  className="hidden"
+                  className="sr-only"
                 />
                 <div
                   className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${

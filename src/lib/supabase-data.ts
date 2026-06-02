@@ -690,7 +690,52 @@ export function computeTaskInbox(
   return items;
 }
 
-// ── Teacher CRUD ──────────────────────────────────────────────
+// ── Teacher Batch CRUD ────────────────────────────────────────
+
+export async function saveChapterBatch(
+  chapterId: string,
+  data: {
+    metadata: Record<string, string>;
+    pengayaan: { instruction: string | null; enabled: boolean };
+    materials: Array<{ id?: string; section_order: number; type: string; content: string; caption: string | null }>;
+    tasks: Array<{
+      id?: string; title: string; description: string; due_date: string | null; task_order: number;
+      questions: Array<{ id?: string; question_order: number; question: string; options: string[]; correct_index: number }>;
+    }>;
+    pretest: Array<{ id?: string; question_order: number; question: string; options: string[]; correct_index: number }>;
+    posttest: Array<{ id?: string; question_order: number; question: string; options: string[]; correct_index: number }>;
+  },
+): Promise<{ ok: boolean; message: string }> {
+  try {
+    const { data: result, error } = await supabase.rpc('save_chapter_batch', {
+      p_chapter_id: chapterId,
+      p_metadata: data.metadata,
+      p_pengayaan: data.pengayaan,
+      p_materials: data.materials,
+      p_tasks: data.tasks,
+      p_pretest: data.pretest,
+      p_posttest: data.posttest,
+    });
+    if (error) throw error;
+    return result as { ok: boolean; message: string };
+  } catch (err) {
+    console.error('saveChapterBatch failed:', err);
+    return { ok: false, message: 'Gagal menyimpan perubahan.' };
+  }
+}
+
+export async function deleteChapter(chapterId: string): Promise<{ ok: boolean; message: string }> {
+  try {
+    const { data: result, error } = await supabase.rpc('delete_chapter', {
+      p_chapter_id: chapterId,
+    });
+    if (error) throw error;
+    return result as { ok: boolean; message: string };
+  } catch (err) {
+    console.error('deleteChapter failed:', err);
+    return { ok: false, message: 'Gagal menghapus bab.' };
+  }
+}
 
 export async function deleteChapterMaterial(materialId: string): Promise<boolean> {
   try {
