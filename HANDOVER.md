@@ -53,11 +53,16 @@ users/{uid}/nilai/{babId}-{type}
 | `src/app/nilai/page.tsx` | Nilai page — groups useNilai scores by chapter |
 | `src/app/tugas/page.tsx` | Tugas inbox — uses computeTaskInbox(chapters, progress, userId) |
 
-## Auth / Login
+## Auth / Login (updated: username+password)
 
-- siswa001@pasraman.id / pasraman123
-- guru001@pasraman.id / pasraman123
-- Domain otomatis: username → username@pasraman.id
+- **Username only** — no email needed on login. Internal email `{username}@pasraman.id` is hidden.
+- **Password:** bcrypt hash stored in `app_users.password_hash`, verified via `verify_user_password` RPC.
+- **Flow:** username → RPC checks bcrypt → returns internal email → `signInWithPassword(email, pass)` → session.
+- **Google OAuth:** not yet wired — Supabase Auth supports it, just needs UI button + `ensureAppUser` handles auto-registration.
+- **Test accounts:**
+  - `siswa001` / `pasraman123`
+  - `guru001` / `pasraman123`
+  - `santri001` / `pasraman123`
 
 ## Deploy Commands
 

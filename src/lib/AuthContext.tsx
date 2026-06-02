@@ -45,13 +45,6 @@ function normalizeUser(user: User | null): LmsUser | null {
 }
 
 async function ensureAppUser(user: User): Promise<AppRole | null> {
-  const email = user.email ?? `${user.id}@unknown.local`;
-  const username = email.split('@')[0];
-  const displayName =
-    typeof user.user_metadata?.display_name === 'string' ? user.user_metadata.display_name :
-    typeof user.user_metadata?.full_name === 'string' ? user.user_metadata.full_name :
-    username;
-
   const { data: existing, error: selectError } = await supabase
     .from('app_users')
     .select('role')
@@ -60,6 +53,15 @@ async function ensureAppUser(user: User): Promise<AppRole | null> {
 
   if (selectError) console.error('app_users select failed:', selectError);
   if (existing?.role) return existing.role as AppRole;
+
+  // User not in app_users yet — likely a new Google login
+  // Auto-register as student for now
+  const email = user.email ?? `${user.id}@unknown.local`;
+  const username = email.split('@')[0];
+  const displayName =
+    typeof user.user_metadata?.display_name === 'string' ? user.user_metadata.display_name :
+    typeof user.user_metadata?.full_name === 'string' ? user.user_metadata.full_name :
+    username;
 
   const { data, error } = await supabase
     .from('app_users')
@@ -126,8 +128,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signIn = async (username: string, password: string) => {
-    const email = username.includes('@') ? username : `${username}@pasraman.id`;
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    // Resolve username → email via RPC (bcrypt-verified)
+    const { verifyUsernamePassword } = await import('@/lib/supabase-data');
+    const result = await verifyUsernamePassword(username, password);
+    if (!result) throw new Error('Username atau password salah');
+    const { error } = await supabase.auth.signInWithPassword({ email: result.email, password });
     if (error) throw error;
   };
 

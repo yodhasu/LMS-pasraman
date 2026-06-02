@@ -257,6 +257,30 @@ export function useChapters() {
   return { chapters, loading };
 }
 
+/** Call verify_user_password RPC. Returns user_id + email on match, null on failure. */
+export async function verifyUsernamePassword(
+  username: string,
+  password: string,
+): Promise<{ userId: string; email: string } | null> {
+  try {
+    const { data, error } = await supabase.rpc('verify_user_password', {
+      username_input: username,
+      password_input: password,
+    });
+    if (error) {
+      console.error('verifyUsernamePassword RPC error:', error);
+      return null;
+    }
+    // RPC returns table(user_id uuid, email text) — supabase-js returns array of rows
+    const rows = data as { user_id: string; email: string }[] | null;
+    if (!rows || rows.length === 0) return null;
+    return { userId: rows[0].user_id, email: rows[0].email };
+  } catch (err) {
+    console.error('verifyUsernamePassword failed:', err);
+    return null;
+  }
+}
+
 export function useStudentProgress() {
   const [progress, setProgress] = useState<StudentProgressMap>({});
   const [user, setUser] = useState<ReturnType<typeof normalizeUser>>(null);
