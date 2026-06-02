@@ -4,7 +4,7 @@ import Link from 'next/link';
 import ReactMarkdown from 'react-markdown';
 import {
   useChapters, useChapterMaterials, useStudentProgress, markChapterStep,
-  saveScore, submitTaskAnswer, submitPengayaanLink,
+  saveScore, submitTaskAnswer, submitPengayaanLink, markMaterialViewed,
   deleteChapterMaterial, updateChapterMetadata, createChapterMaterial, updateChapterMaterial,
 } from '@/lib/supabase-data';
 import { useAuth } from '@/lib/AuthContext';
@@ -46,10 +46,11 @@ export default function ChapterClient() {
   const chapterId = params.chapterId as string;
   const isTeacherMode = searchParams.get('teacher') === 'true';
 
-  const { chapters, loading } = useChapters();
+  const [dataRefreshKey, setDataRefreshKey] = useState(0);
+  const { chapters, loading } = useChapters(dataRefreshKey);
   const { progress, user, refreshProgress } = useStudentProgress();
   const { role } = useAuth();
-  const { materials, matProgress, loading: matLoading } = useChapterMaterials(chapterId);
+  const { materials, matProgress, loading: matLoading } = useChapterMaterials(chapterId, dataRefreshKey);
   const [pretestResult, setPretestResult] = useState<{ score: number; answers: Record<string, number> } | null>(null);
   const [posttestResult, setPosttestResult] = useState<{ score: number; answers: Record<string, number> } | null>(null);
 
@@ -64,6 +65,7 @@ export default function ChapterClient() {
   const [editCoverColor, setEditCoverColor] = useState('');
   const [editing, setEditing] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const chapter = chapters.find(c => c.id === chapterId);
   const cIdx = chapter ? chapters.findIndex(c => c.id === chapterId) : -1;
@@ -86,10 +88,12 @@ export default function ChapterClient() {
     }
   }, [chapter?.id]);
 
+  const refreshChapterData = () => setDataRefreshKey((key) => key + 1);
+
   const handleDeleteMaterial = async (materialId: string) => {
     const ok = await deleteChapterMaterial(materialId);
     if (ok) {
-      window.location.reload();
+      refreshChapterData();
     } else {
       alert('Gagal menghapus materi. Coba lagi.');
     }
@@ -98,7 +102,7 @@ export default function ChapterClient() {
   const handleCreateMaterial = async (data: { type: Chapter['materials'][number]['type']; content: string; caption?: string | null }) => {
     const ok = await createChapterMaterial(chapterId, data);
     if (ok) {
-      window.location.reload();
+      refreshChapterData();
     } else {
       alert('Gagal menambah materi. Coba lagi.');
     }
@@ -107,13 +111,18 @@ export default function ChapterClient() {
   const handleUpdateMaterial = async (materialId: string, data: { type: Chapter['materials'][number]['type']; content: string; caption?: string | null }) => {
     const ok = await updateChapterMaterial(materialId, data);
     if (ok) {
-      window.location.reload();
+      refreshChapterData();
     } else {
       alert('Gagal mengubah materi. Coba lagi.');
     }
   };
 
   const handleSaveMetadata = async () => {
+    setSaveError(null);
+    if (!chapterReadyForStudent) {
+      setSaveError('Lengkapi pre-test, materi, tugas, dan post-test sebelum menyimpan bab untuk siswa.');
+      return;
+    }
     setEditing(true);
     const ok = await updateChapterMetadata(chapterId, {
       title: editTitle,
@@ -125,13 +134,14 @@ export default function ChapterClient() {
     setEditing(false);
     if (ok) {
       setSaved(true);
-      setTimeout(() => { setSaved(false); window.location.reload(); }, 800);
+      refreshChapterData();
+      setTimeout(() => setSaved(false), 1800);
     } else {
       alert('Gagal menyimpan. Coba lagi.');
     }
   };
 
-  if (loading) {
+  if (loading || matLoading) {
     return (
       <div className="max-w-2xl mx-auto flex items-center justify-center min-h-[300px]">
         <div className="w-8 h-8 border-2 border-[#e8efe4] border-t-[#1F3D30] rounded-full animate-spin" />
@@ -180,14 +190,25 @@ export default function ChapterClient() {
   }
 
   // ── Computed ──
-  const hasPreTest = chapter.preTest && chapter.preTest.length > 0;
-  const preTestStepDone = !hasPreTest || prog.pretest;
+  const hasPreTest = !!chapter.preTest && chapter.preTest.length > 0;
+  const preTestStepDone = prog.pretest;
   const materialStepDone = prog.materi || false;
-  const tasksAllDone = chapter.tasks.length === 0 || prog.tugas;
+  const tasksAllDone = prog.tugas;
   const postTestStepDone = prog.posttest || false;
   const postTestUnlocked = teacherView || materialStepDone && tasksAllDone;
   const optionalUnlocked = teacherView || postTestStepDone;
   const displayName = user?.displayName || user?.email?.split('@')[0] || 'Siswa';
+  const hasMaterials = materials.length > 0;
+  const hasTasks = chapter.tasks.length > 0;
+  const tasksHaveQuestions = hasTasks && chapter.tasks.every((task) => task.questions.length > 0);
+  const hasPostTest = chapter.postTestMandatory.length > 0;
+  const chapterReadyForStudent = hasPreTest && hasMaterials && tasksHaveQuestions && hasPostTest;
+  const readinessItems = [
+    { label: 'Pre-test', done: hasPreTest },
+    { label: 'Materi', done: hasMaterials },
+    { label: 'Tugas + soal', done: tasksHaveQuestions },
+    { label: 'Post-test', done: hasPostTest },
+  ];
 
   // ── Handlers ──
   const handlePreTestComplete = async (score: number, answers: Record<string, number>) => {
@@ -200,8 +221,10 @@ export default function ChapterClient() {
   };
 
   const handleMaterialDone = async () => {
-    if (!user) return;
+    if (!user || materials.length === 0) return;
+    await Promise.all(materials.map((material) => markMaterialViewed(user.uid, material.id)));
     await markChapterStep(user.uid, chapterId, 'materi');
+    refreshChapterData();
     refreshProgress(user.uid);
   };
 
@@ -210,23 +233,25 @@ export default function ChapterClient() {
       await submitTaskAnswer(chapterId, taskIdx, user.uid, displayName, answers, score);
       await saveScore(user.uid, chapterId, 'tugas', score);
 
-      const hasPendingTasks = chapter.tasks.some((task) => {
-        const submitted = (task.answer || []).some(a => a.userId === user.uid);
-        return !submitted;
-      });
-      if (!hasPendingTasks || chapter.tasks.length === 1) {
+      const allTasksSubmitted = chapter.tasks.every((task, index) => (
+        index === taskIdx || (task.answer || []).some(a => a.userId === user.uid)
+      ));
+      if (allTasksSubmitted) {
         await markChapterStep(user.uid, chapterId, 'tugas');
       }
+      refreshChapterData();
       refreshProgress(user.uid);
     }
   };
 
   const handlePostTestComplete = async (score: number, answers: Record<string, number>) => {
     if (user) {
-      setPosttestResult({ score, answers });
-      await markChapterStep(user.uid, chapterId, 'posttest');
       await saveScore(user.uid, chapterId, 'posttest', score);
-      refreshProgress(user.uid);
+      if (score >= 70) {
+        setPosttestResult({ score, answers });
+        await markChapterStep(user.uid, chapterId, 'posttest');
+        refreshProgress(user.uid);
+      }
     }
   };
 
@@ -275,9 +300,9 @@ export default function ChapterClient() {
                 className="block w-full px-3 py-2 text-sm border border-[#1F3D30]/20 rounded-lg bg-white/60 mt-0.5"
                 placeholder="from-green-100 to-emerald-200" />
             </div>
-            <button onClick={handleSaveMetadata} disabled={editing}
+            <button onClick={handleSaveMetadata} disabled={editing || !chapterReadyForStudent}
               className="px-4 py-2 bg-[#1F3D30] text-white rounded-xl text-sm font-semibold hover:bg-[#2A5A44] transition-colors disabled:opacity-50">
-              {editing ? 'Menyimpan...' : saved ? '✅ Tersimpan!' : '💾 Simpan Metadata'}
+              {editing ? 'Menyimpan...' : saved ? '✅ Tersimpan!' : chapterReadyForStudent ? '💾 Simpan Metadata' : 'Lengkapi Bab Dulu'}
             </button>
           </div>
         ) : (
@@ -287,6 +312,31 @@ export default function ChapterClient() {
           </>
         )}
       </div>
+
+      {isTeacher && (
+        <div className="rounded-2xl border border-[#1F3D30]/5 bg-white p-4 space-y-3">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-bold text-[#1F3D30]">Kesiapan Bab untuk Siswa</p>
+              <p className="text-xs text-[#5C7A6E] mt-0.5">Guru dan siswa melihat konteks bab yang sama. Progress siswa tidak berlaku untuk guru.</p>
+            </div>
+            <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${chapterReadyForStudent ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
+              {chapterReadyForStudent ? 'Siap' : 'Draft'}
+            </span>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+            {readinessItems.map((item) => (
+              <div key={item.label} className={`rounded-xl px-3 py-2 text-xs font-semibold ${item.done ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
+                {item.done ? '✓' : '○'} {item.label}
+              </div>
+            ))}
+          </div>
+          {!chapterReadyForStudent && (
+            <p className="text-xs text-[#8A6D2B]">Lengkapi semua bagian sebelum bab dianggap siap dipakai siswa.</p>
+          )}
+          {saveError && <p className="text-xs font-medium text-red-600">{saveError}</p>}
+        </div>
+      )}
 
       {/* Pre-test */}
       {hasPreTest ? (
@@ -302,7 +352,7 @@ export default function ChapterClient() {
           )}
         </SectionCard>
       ) : (
-        <SectionCard step={1} title="Tanpa Pre-Test" description="Guru tidak mengaktifkan pre-test untuk bab ini." done={true} unlocked={true} />
+        <SectionCard step={1} title="Pre-Test Belum Dikonfigurasi" description="Bab belum siap untuk siswa karena pre-test wajib belum tersedia." done={false} unlocked={teacherView} />
       )}
 
       {/* Materi */}
@@ -321,7 +371,7 @@ export default function ChapterClient() {
       </SectionCard>
 
       {/* Tugas */}
-      {chapter.tasks.length > 0 && (
+      {chapter.tasks.length > 0 ? (
         <SectionCard step={hasPreTest ? 3 : 2} title="Tugas" description={teacherView ? "Preview tugas siswa untuk bab ini." : "Kerjakan tugas berikut untuk melanjutkan."} done={teacherView ? true : tasksAllDone} unlocked={teacherView || materialStepDone}>
           <div className="ml-11 space-y-4">
             {chapter.tasks.map((task, tIdx) => (
@@ -342,6 +392,8 @@ export default function ChapterClient() {
             ))}
           </div>
         </SectionCard>
+      ) : (
+        <SectionCard step={hasPreTest ? 3 : 2} title="Tugas Belum Dikonfigurasi" description="Bab belum siap untuk siswa karena tugas wajib belum tersedia." done={false} unlocked={teacherView || materialStepDone} />
       )}
 
       {/* Post-test Wajib */}

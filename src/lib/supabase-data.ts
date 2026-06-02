@@ -118,7 +118,7 @@ async function currentUser(): Promise<User | null> {
   return data.user ?? null;
 }
 
-export function useChapters() {
+export function useChapters(refreshKey: number | string = 0) {
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -250,7 +250,7 @@ export function useChapters() {
 
     load();
     return () => { cancelled = true; };
-  }, []);
+  }, [refreshKey]);
 
   return { chapters, loading };
 }
@@ -358,7 +358,7 @@ type RawMaterialProgress = {
   viewed_at: string | null;
 };
 
-export function useChapterMaterials(chapterId: string | null) {
+export function useChapterMaterials(chapterId: string | null, refreshKey: number | string = 0) {
   const [materials, setMaterials] = useState<ChapterMaterial[]>([]);
   const [matProgress, setMatProgress] = useState<MaterialProgressMap>({});
   const [loading, setLoading] = useState(true);
@@ -418,7 +418,7 @@ export function useChapterMaterials(chapterId: string | null) {
     });
 
     return () => { cancelled = true; subscription.unsubscribe(); };
-  }, [chapterId]);
+  }, [chapterId, refreshKey]);
 
   return { materials, matProgress, loading };
 }
