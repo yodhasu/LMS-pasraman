@@ -12,15 +12,15 @@ begin
     raise exception 'teacher/admin only';
   end if;
 
-  delete from public.material_progress;
-  delete from public.pengayaan_submissions;
-  delete from public.task_submissions;
-  delete from public.scores;
-  delete from public.chapter_progress;
-  delete from public.pengayaan_prompts;
-  delete from public.mcq_questions;
-  delete from public.chapter_tasks;
-  delete from public.chapters;
+  delete from public.material_progress where true;
+  delete from public.pengayaan_submissions where true;
+  delete from public.task_submissions where true;
+  delete from public.scores where true;
+  delete from public.chapter_progress where true;
+  delete from public.pengayaan_prompts where true;
+  delete from public.mcq_questions where true;
+  delete from public.chapter_tasks where true;
+  delete from public.chapters where true;
   insert into public.chapters (id, order_index, title, subtitle, description, material_content, material_video_url, cover_emoji, cover_color) values ('bab-1', 1, 'Pengantar Susila Hindu', 'Apa itu Susila dan mengapa penting?', 'Memahami konsep dasar Susila dalam Hindu: arti, sumber ajaran, dan penerapannya dalam kehidupan sehari-hari.', '', null, '🪷', 'from-orange-100 to-amber-200');
   insert into public.mcq_questions (id, chapter_id, task_id, assessment, question_order, question, options, correct_index) values ('pre1-1', 'bab-1', null, 'pretest', 0, 'Apa arti kata "Su" dalam Susila?', '["Kuat","Baik","Suci","Agung"]'::jsonb, 1);
   insert into public.mcq_questions (id, chapter_id, task_id, assessment, question_order, question, options, correct_index) values ('pre1-2', 'bab-1', null, 'pretest', 1, 'Manawa Dharmasastra termasuk golongan kitab?', '["Weda Sruti","Weda Smerti","Itihasa","Purana"]'::jsonb, 1);
@@ -105,7 +105,7 @@ begin
   3. Bisa dibuat dengan Canva, PPT, atau gambar tangan
   4. Upload hasilnya ke Google Drive
   5. **Submit link di sini**');
-  delete from public.chapter_materials;
+  delete from public.chapter_materials where true;
   insert into public.chapter_materials (chapter_id, section_order, type, content, caption) values ('bab-1', 0, 'text', '## Apa itu Susila?
   Susila berasal dari bahasa Sanskerta: **Su** (baik) dan **Sila** (perilaku). Susila adalah ajaran tentang tingkah laku yang baik dan benar sesuai Dharma.', null);
   insert into public.chapter_materials (chapter_id, section_order, type, content, caption) values ('bab-1', 1, 'text', '## Mengapa Mempelajari Susila Penting?
