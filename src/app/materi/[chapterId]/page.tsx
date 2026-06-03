@@ -1,7 +1,7 @@
 import ChapterClient from './ChapterClient';
 
 // Generate pages for known chapters. New chapters created after build
-// are served by Firebase rewriting /materi/* → /index.html, with
+// are served by the hosting provider
 // ChapterClient handling the data load client-side.
 export async function generateStaticParams() {
   try {

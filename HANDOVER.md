@@ -1,28 +1,37 @@
 # LMS Pasraman — Handover
-> 2026-06-02 | Vela → next session
+> 2026-06-03 | Vela → next session (Vercel Migration)
 
 ## What Just Happened
 
-Teacher features implemented + auth cleanup + AGY-reviewed:
+Bulk teacher CRUD + batch-save + Vercel migration:
 
-1. **Username+password auth** — login pure username (no email visible), internal email `{username}@pasraman.id` handled by Supabase Auth. Migration `20260602_username_password_auth.sql` adds bcrypt password hashing.
-2. **Teacher view** — guru001 auto-detects as teacher. Materi page shows "+ Tambah Bab" button. Chapter detail has "✏️ Edit Bab" link.
-3. **Material management** — red X delete button on each material box (teacher only), with confirmation dialog.
-4. **Bab creation flow** — Tambah Bab → creates placeholder chapter in Supabase → redirects to `/materi/bab-X?teacher=true` with editable fields.
-5. **Editable chapter metadata** — title, subtitle, description, coverEmoji, coverColor all inline-editable for teachers with save button.
-6. **RLS hardened** — `chapter_materials` and `material_progress` now have proper RLS policies (`20260602_chapter_materials_rls.sql`).
+1. **Batch-save CRUD** — all chapter edits in local state, saved via single RPC `save_chapter_batch`. No more per-field API calls.
+2. **Inline editing** — no modals, no redirects. Teacher edits directly on the page.
+3. **Color picker** — 8 visual color buttons instead of manual Tailwind class input.
+4. **Post-test label fix** — correctly shows "Post-test dinonaktifkan".
+5. **Toast + redirect** — after save, toast 1.5s then redirect to `/materi`.
+6. **Rate-limit login** — 5 failed attempts → 60s lock, reset on success.
+7. **Multiple tasks bug fix** — `handleTugasComplete` skips correct task index.
+8. **Preview guru fix** — `isTeacher={teacherView}` instead of hardcoded `false`.
+9. **Firebase removed** — no more `firebase.json`, `.firebaserc`, `firestore.rules`. Full Supabase.
+10. **Vercel ready** — `output: 'export'` removed, standard Next.js build. 16 static pages.
 
 ## Current State
 
-- **Deploy-ready:** build passing — TypeScript clean, 15 static pages
-- **Repo:** https://github.com/yodhasu/LMS-pasraman (uncommitted changes)
+- **Build:** passing — TypeScript clean, 16 pages (15 static + 1 SSG with `generateStaticParams`)
+- **Repo:** https://github.com/yodhasu/LMS-pasraman
+- **Live (old):** `lmspasraman.web.app` (Firebase — will be decommissioned)
+- **Live (new):** deploy via Vercel (connect repo in Vercel dashboard)
 - **Auth:** Supabase Auth, username+password, `app_users` with role (student/teacher/admin)
+- **Envs needed for Vercel:**
+  - `NEXT_PUBLIC_SUPABASE_URL` = `https://qohkwhtgazvhcygqnehg.supabase.co`
+  - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` = `sb_publishable_...`
 
 ## DB Schema (Supabase)
 
 ```
 chapters (id, order_index, title, subtitle, description, cover_emoji, cover_color, ...)
-├── chapter_materials (id, chapter_id, section_order, type, content, caption)  ← NEW RLS
+├── chapter_materials (id, chapter_id, section_order, type, content, caption)
 ├── chapter_tasks (id, chapter_id, title, description, due_date, task_order)
 ├── mcq_questions (id, chapter_id, task_id, assessment, question_order, ...)
 └── pengayaan_prompts (chapter_id, instruction)
@@ -30,47 +39,66 @@ chapters (id, order_index, title, subtitle, description, cover_emoji, cover_colo
 app_users (id → auth.users.id, username, password_hash, display_name, role)
 ├── chapter_progress (user_id, chapter_id, pretest/materi/tugas/posttest, complete)
 ├── scores (user_id, chapter_id, type, score)
-├── material_progress (user_id, material_id, viewed, viewed_at)               ← NEW RLS
+├── material_progress (user_id, material_id, viewed, viewed_at)
 ├── task_submissions (task_id, user_id, answers, score)
 └── pengayaan_submissions (chapter_id, user_id, link)
 ```
+
+### RPC Functions
+- `verify_user_password(text, text)` — auth helper (username, password_hash)
+- `create_app_user(text, text, text)` — create user with role
+- `is_teacher_or_admin()` — role check
+- `save_chapter_batch(uuid, jsonb, jsonb, jsonb, jsonb)` — atomic batch save
+- `delete_chapter_cascade(uuid)` — delete chapter + all relations
+- `reset_lms_prototype_data(uuid)` — full prototype reset
 
 ## Auth
 
 - **Login:** username + password → internal email auto-generated → Supabase Auth
 - **Test accounts:** `siswa001` / `pasraman123`, `guru001` / `pasraman123`, `santri001` / `pasraman123`
-- **Role:** `guru001` should be teacher — run `scripts/seed-teacher.cjs` or fix manually if not
+- **Role:** `guru001` = teacher
 
 ## Key Files (updated)
 
 | File | What changed |
 |------|-------------|
-| `src/lib/supabase-data.ts` | Removed VALID_CHAPTER_IDS hardcod. Added deleteChapterMaterial, createEmptyChapter, updateChapterMetadata. Dynamic progress map. |
-| `src/app/materi/page.tsx` | Tambah Bab button + create flow for teachers |
-| `src/app/materi/[chapterId]/ChapterClient.tsx` | Teacher mode with editable fields, ?teacher=true param, useEffect init, error checking on delete/save |
-| `src/app/materi/[chapterId]/page.tsx` | Dynamic generateStaticParams fetches all chapter IDs from Supabase at build time |
-| `src/components/ChapterContent.tsx` | isTeacher prop, red X delete button on materials |
-| `supabase/migrations/20260602_username_password_auth.sql` | Username+password auth migration |
-| `supabase/migrations/20260602_chapter_materials_rls.sql` | RLS policies for chapter_materials + material_progress |
-| `scripts/seed-teacher.cjs` | Teacher account seeder |
+| `next.config.ts` | Removed `output: 'export'`, `images.unoptimized`. Clean for Vercel. |
+| `ChapterClient.tsx` | Batch-save state, inline editor, Simpan Perubahan + Hapus Bab at bottom |
+| `src/app/materi/[chapterId]/page.tsx` | `generateStaticParams` fetches all chapter IDs from Supabase |
+| `src/lib/supabase-data.ts` | Batch save/delete RPCs, data hooks |
+| `src/lib/AuthContext.tsx` | Rate-limit login (5 attempts → 60s lock) |
+| `src/components/MaterialSection.tsx` | Inline editable materials |
+| `src/components/QuestionEditor.tsx` | Inline question editor |
+| `src/components/ColorPicker.tsx` | 8-color visual picker |
+| `src/components/MCQResult.tsx` | Show correct answers for wrong questions only |
+| `firebase.json` | **DELETED** — no longer Firebase-hosted |
+| `.firebaserc` | **DELETED** |
+| `firestore.rules` | **DELETED** |
 
 ## Deploy Commands
 
 ```bash
 cd ~/Documents/Code/LMS-pasraman
-npm run build
-firebase deploy --only hosting
+pnpm build
+vercel --prod
 ```
 
-## ⚠️ Before Deploy
+**OR:** connect GitHub repo to Vercel dashboard → auto-deploys on push to main.
 
-1. **Run RLS migration** on Supabase: `supabase/migrations/20260602_chapter_materials_rls.sql`
-2. **Ensure guru001 is teacher** — `scripts/seed-teacher.cjs` or manual SQL
-3. **guru001 password** — if created via dashboard, set password via SQL or reset
+## ⚠️ Before Deploy to Vercel
+
+1. **Set env vars in Vercel dashboard:**
+   - `NEXT_PUBLIC_SUPABASE_URL`
+   - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+2. **Connect repo** at https://vercel.com → Add New Project → Import `yodhasu/LMS-pasraman`
+3. **Run RLS migration** on Supabase if not yet applied
+4. **No firebase.json needed** — Vercel handles routing natively
+5. **Dynamic routes** (`[chapterId]`) work via `generateStaticParams` + on-demand SSR for new chapters
 
 ## Known Limitations
 
-- **Chapter materials** table may have been created manually — migration includes `create table if not exists` to be safe
-- **New chapters beyond bab-6** need rebuild to appear as static pages (generateStaticParams fetches at build time)
-- **Delete material** still uses `window.location.reload()` — suboptimal but functional for static export
-- **AGY review:** race condition in createEmptyChapter (unlikely with single teacher), unsaved `initDone` anti-pattern fixed to useEffect
+- **Seeded passwords** (`pasraman123`) hardcoded in migration files — should use env vars
+- **Correct answer keys** exposed to anon via RLS on `mcq_questions` — needs a student/teacher view split
+- **Remove `window.location.reload()`** in dashboard reset — should use React state refresh
+- **Teacher multi-class flow** — schema planned but not implemented (see `docs/plans/`)
+- **AGY review:** race condition in `createEmptyChapter` (unlikely with single teacher)
