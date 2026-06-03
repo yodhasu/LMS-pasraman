@@ -1,6 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useAuth } from '@/lib/AuthContext';
 
 const tabs = [
   { href: '/dashboard', label: 'Dashboard', icon: '🏠' },
@@ -11,6 +12,7 @@ const tabs = [
 
 export default function BottomNav() {
   const pathname = usePathname();
+  const { logout } = useAuth();
 
   return (
     <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-[#1F3D30]/10 z-40 safe-bottom">
@@ -30,6 +32,13 @@ export default function BottomNav() {
             </Link>
           );
         })}
+        <button
+          onClick={logout}
+          className="flex flex-col items-center justify-center gap-0.5 min-w-0 flex-1 py-1 text-[#DC2626] transition-colors cursor-pointer"
+        >
+          <span className="text-xl">🚪</span>
+          <span className="text-[11px] font-medium">Keluar</span>
+        </button>
       </div>
     </nav>
   );
