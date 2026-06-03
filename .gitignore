@@ -1,8 +1,5 @@
 .next/
 out/
 node_modules/
-.firebase/
-firestore-debug.log
 accounts.json
-firebase-admin-*.json
 .env*.local
