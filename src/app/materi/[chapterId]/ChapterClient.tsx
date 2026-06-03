@@ -116,7 +116,7 @@ export default function ChapterClient() {
 
   // ── Init edit state from DB data ──
   useEffect(() => {
-    if (!chapter || !materials || dataLoaded) return;
+    if (!chapter || matLoading || dataLoaded) return;
     setEditTitle(chapter.title);
     setEditSubtitle(chapter.subtitle ?? '');
     setEditDescription(chapter.description ?? '');
@@ -131,7 +131,7 @@ export default function ChapterClient() {
     setEditPengayaanEnabled(!!chapter.postTestOptional);
     setEditPengayaanText(chapter.postTestOptional?.instruction ?? '');
     setDataLoaded(true);
-  }, [chapter, materials, dataLoaded]);
+  }, [chapter, matLoading, dataLoaded]);
 
   // ── Computed ──
   const hasPreTest = chapter && chapter.preTest && chapter.preTest.length > 0;
