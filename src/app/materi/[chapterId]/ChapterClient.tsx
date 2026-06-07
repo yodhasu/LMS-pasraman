@@ -162,7 +162,8 @@ export default function ChapterClient() {
 
   const handleTugasComplete = (taskIdx: number) => async (score: number, answers: Record<string, number>) => {
     if (!user || !chapter) return;
-    await submitTaskAnswer(chapterId, taskIdx, user.uid, displayName, answers, score);
+    const submitted = await submitTaskAnswer(chapterId, taskIdx, user.uid, displayName, answers, score);
+    if (!submitted) return; // submission failed — don't mark as completed
     await saveScore(user.uid, chapterId, 'tugas', score);
     // Mark this task as completed locally so multi-task chapters don't block
     completedTasksRef.current[taskIdx] = true;
