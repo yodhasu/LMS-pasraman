@@ -51,7 +51,7 @@ function AuthGuard({ children }: { children: ReactNode }) {
     <>
       <Sidebar />
       <div className="lg:ml-64 pb-20 lg:pb-0">
-        <main className="p-4 lg:p-8 min-h-screen">{children}</main>
+        <main className="p-4 lg:p-8 pb-20 min-h-screen">{children}</main>
       </div>
       <BottomNav />
     </>
