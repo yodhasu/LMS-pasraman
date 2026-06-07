@@ -21,6 +21,7 @@ export async function generateStaticParams() {
   }
 }
 
-export default function ChapterPage() {
-  return <ChapterClient />;
+export default async function ChapterPage({ params }: { params: Promise<{ chapterId: string }> }) {
+  const { chapterId } = await params;
+  return <ChapterClient key={chapterId} />;
 }
