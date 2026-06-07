@@ -10,7 +10,7 @@ import {
 import { useAuth } from '@/lib/AuthContext';
 import MCQTest from '@/components/MCQTest';
 import ChapterContent from '@/components/ChapterContent';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { ChapterProgressDetail, Chapter, ChapterMaterial, ChapterTask, MCQ } from '@/lib/types';
 import MCQResult from '@/components/MCQResult';
 
@@ -66,6 +66,7 @@ export default function ChapterClient() {
   const { materials, matProgress, loading: matLoading } = useChapterMaterials(chapterId);
   const [pretestResult, setPretestResult] = useState<{ score: number; answers: Record<string, number> } | null>(null);
   const [posttestResult, setPosttestResult] = useState<{ score: number; answers: Record<string, number> } | null>(null);
+  const completedTasksRef = useRef<Record<number, boolean>>({});
 
   const isTeacher = role === 'teacher' || role === 'admin';
   const teacherMode = isTeacher && isTeacherMode;
@@ -163,11 +164,11 @@ export default function ChapterClient() {
     if (!user || !chapter) return;
     await submitTaskAnswer(chapterId, taskIdx, user.uid, displayName, answers, score);
     await saveScore(user.uid, chapterId, 'tugas', score);
-    // Check remaining tasks (skip taskIdx — just submitted) using stale chapter data.
-    // Even if chapter.tasks hasn't refreshed, taskIdx is definitively submitted now,
-    // so any other task without an answer from this user is truly pending.
+    // Mark this task as completed locally so multi-task chapters don't block
+    completedTasksRef.current[taskIdx] = true;
+    // Check remaining tasks using stale chapter data + local completedTasksRef
     const hasOtherPending = chapter.tasks.some((task, i) => {
-      if (i === taskIdx) return false;
+      if (i === taskIdx || completedTasksRef.current[i]) return false;
       return !(task.answer || []).some(a => a.userId === user.uid);
     });
     if (!hasOtherPending) {
@@ -319,9 +320,19 @@ export default function ChapterClient() {
   const handleDelete = async () => {
     if (!confirmDelete) { setConfirmDelete(true); return; }
     setDeleting(true);
-    const result = await deleteChapter(chapterId);
-    if (result.ok) {
-      router.push('/materi');
+    try {
+      const result = await deleteChapter(chapterId);
+      if (result.ok) {
+        router.push('/materi');
+      } else {
+        setSaveMsg(result.message || 'Gagal menghapus bab.');
+        setDeleting(false);
+        setConfirmDelete(false);
+      }
+    } catch {
+      setSaveMsg('Terjadi kesalahan koneksi saat menghapus.');
+      setDeleting(false);
+      setConfirmDelete(false);
     }
   };
 
@@ -442,6 +453,18 @@ export default function ChapterClient() {
           </div>
         </div>
 
+        {/* ── Pre-Test Editor ── */}
+        <TeacherQuestionEditor
+          title="📝 Pre-Test"
+          disabledMessage="Pre-test dinonaktifkan. Siswa akan langsung masuk ke materi."
+          enabled={editPretestEnabled}
+          onToggle={() => setEditPretestEnabled(!editPretestEnabled)}
+          questions={editPretestQuestions}
+          onAdd={() => addQuestion(setEditPretestQuestions)}
+          onUpdate={(i, p) => updateQuestion(setEditPretestQuestions, i, p)}
+          onRemove={i => removeQuestion(setEditPretestQuestions, i)}
+        />
+
         {/* ── Materials Section Editor ── */}
         <div className="bg-white rounded-2xl border border-[#1F3D30]/5 p-5">
           <div className="flex items-center justify-between mb-4">
@@ -485,30 +508,6 @@ export default function ChapterClient() {
           </div>
         </div>
 
-        {/* ── Pre-Test Editor ── */}
-        <TeacherQuestionEditor
-          title="📝 Pre-Test"
-          disabledMessage="Pre-test dinonaktifkan. Siswa akan langsung masuk ke materi."
-          enabled={editPretestEnabled}
-          onToggle={() => setEditPretestEnabled(!editPretestEnabled)}
-          questions={editPretestQuestions}
-          onAdd={() => addQuestion(setEditPretestQuestions)}
-          onUpdate={(i, p) => updateQuestion(setEditPretestQuestions, i, p)}
-          onRemove={i => removeQuestion(setEditPretestQuestions, i)}
-        />
-
-        {/* ── Post-Test Editor ── */}
-        <TeacherQuestionEditor
-          title="📝 Post-Test Wajib"
-          disabledMessage="Post-test dinonaktifkan. Siswa akan menyelesaikan bab tanpa post-test."
-          enabled={editPosttestEnabled}
-          onToggle={() => setEditPosttestEnabled(!editPosttestEnabled)}
-          questions={editPosttestQuestions}
-          onAdd={() => addQuestion(setEditPosttestQuestions)}
-          onUpdate={(i, p) => updateQuestion(setEditPosttestQuestions, i, p)}
-          onRemove={i => removeQuestion(setEditPosttestQuestions, i)}
-        />
-
         {/* ── Tugas Editor ── */}
         <div className="bg-white rounded-2xl border border-[#1F3D30]/5 p-5">
           <div className="flex items-center justify-between mb-4">
@@ -551,6 +550,18 @@ export default function ChapterClient() {
             )}
           </div>
         </div>
+
+        {/* ── Post-Test Editor ── */}
+        <TeacherQuestionEditor
+          title="📝 Post-Test Wajib"
+          disabledMessage="Post-test dinonaktifkan. Siswa akan menyelesaikan bab tanpa post-test."
+          enabled={editPosttestEnabled}
+          onToggle={() => setEditPosttestEnabled(!editPosttestEnabled)}
+          questions={editPosttestQuestions}
+          onAdd={() => addQuestion(setEditPosttestQuestions)}
+          onUpdate={(i, p) => updateQuestion(setEditPosttestQuestions, i, p)}
+          onRemove={i => removeQuestion(setEditPosttestQuestions, i)}
+        />
 
         {/* ── Pengayaan Editor ── */}
         <div className="bg-white rounded-2xl border border-[#1F3D30]/5 p-5">
@@ -634,7 +645,9 @@ export default function ChapterClient() {
           )}
         </SectionCard>
       ) : (
-        <SectionCard step={1} title="Tanpa Pre-Test" description="Guru tidak mengaktifkan pre-test untuk bab ini." done={true} unlocked={true} />
+        <div className="bg-white rounded-2xl border border-[#1F3D30]/5 px-5 py-3 flex items-center gap-2">
+          <span className="text-xs text-[#8A9E95]">Pre-test tidak diaktifkan oleh guru. Mulai langsung dari materi.</span>
+        </div>
       )}
 
       {/* Materi */}
@@ -653,8 +666,10 @@ export default function ChapterClient() {
       {chapter.tasks.length > 0 && (
         <SectionCard step={hasPreTest ? 3 : 2} title="Tugas" description={teacherView ? "Preview tugas siswa untuk bab ini." : "Kerjakan tugas berikut untuk melanjutkan."} done={teacherView ? true : tasksAllDone} unlocked={teacherView || materialStepDone}>
           <div className="ml-11 space-y-4">
-            {chapter.tasks.map((task, tIdx) => (
-              <div key={task.id} className={`p-4 rounded-xl border ${tasksAllDone ? 'border-emerald-200 bg-emerald-50' : 'border-[#1F3D30]/5 bg-[#FBF8F4]'}`}>
+            {chapter.tasks.map((task, tIdx) => {
+              const thisTaskDone = tasksAllDone || (completedTasksRef.current[tIdx]) || (task.answer || []).some(a => a.userId === user?.uid);
+              return (
+              <div key={task.id} className={`p-4 rounded-xl border ${thisTaskDone ? 'border-emerald-200 bg-emerald-50' : 'border-[#1F3D30]/5 bg-[#FBF8F4]'}`}>
                 <div className="mb-3">
                   <p className="font-semibold text-sm">{task.title}</p>
                   <p className="text-xs text-[#5C7A6E] mt-0.5">{task.description}</p>
@@ -662,13 +677,14 @@ export default function ChapterClient() {
                 </div>
                 {teacherView ? (
                   <p className="text-sm text-[#5C7A6E]">{task.questions.length} soal tugas tersedia.</p>
-                ) : !tasksAllDone ? (
+                ) : !thisTaskDone ? (
                   <MCQTest questions={task.questions} type="tugas" onComplete={handleTugasComplete(tIdx)} />
                 ) : (
                   <p className="text-sm text-emerald-700 font-medium">✅ Tugas sudah dikerjakan</p>
                 )}
               </div>
-            ))}
+              );
+            })}
           </div>
         </SectionCard>
       )}
