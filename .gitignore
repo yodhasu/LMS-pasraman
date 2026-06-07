@@ -4,3 +4,4 @@ node_modules/
 accounts.json
 firebase-admin-*.json
 .env*.local
+.vercel

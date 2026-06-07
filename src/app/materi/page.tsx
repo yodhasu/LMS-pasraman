@@ -88,18 +88,12 @@ export default function MateriPage() {
         </div>
       )}
 
-      {/* Kalo guru belum pilih kelas, kasih pengingat */}
-      {isTeacher && !selectedClassId && classes.length > 0 && (
-        <div className="bg-amber-50 text-amber-700 text-sm px-4 py-3 rounded-2xl">
-          👆 Pilih kelas terlebih dahulu untuk melihat materi sesuai kelas yang lo ajar.
-        </div>
-      )}
-
+      {/* Empty state — guru belum pilih kelas, atau murid belum punya kelas */}
       {chapters.length === 0 && (
         <div className="bg-amber-50 text-amber-700 text-sm px-4 py-6 rounded-2xl text-center">
           {isTeacher
-            ? '👆 Pilih kelas terlebih dahulu untuk melihat materi.'
-            : 'Kamu belum terdaftar di kelas mana pun. Hubungi guru untuk mendapatkan kelas.'}
+            ? 'Silakan pilih kelas terlebih dahulu untuk melihat materi yang sesuai.'
+            : 'Anda belum terdaftar di kelas mana pun. Hubungi guru untuk mendapatkan kelas.'}
         </div>
       )}
 
