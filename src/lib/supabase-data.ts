@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
-import { Chapter, ChapterMaterial, ChapterProgressDetail, MaterialProgressMap, ScoreRecord, StudentProgressMap, TaskInboxItem } from '@/lib/types';
+import { Chapter, ChapterMaterial, ChapterProgressDetail, ClassEntry, MaterialProgressMap, ScoreRecord, StudentProgressMap, TaskInboxItem } from '@/lib/types';
 import { CHAPTERS } from './mock-data';
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -118,7 +118,7 @@ async function currentUser(): Promise<User | null> {
   return data.user ?? null;
 }
 
-export function useChapters(refreshKey: number | string = 0) {
+export function useChapters(refreshKey: number | string = 0, classId?: string | null) {
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -128,10 +128,19 @@ export function useChapters(refreshKey: number | string = 0) {
     async function load() {
       setLoading(true);
 
+      // Student with no class assignment — empty state
+      if (classId === null) {
+        if (!cancelled) { setChapters([]); setLoading(false); }
+        return;
+      }
+
       // Phase 1: anon-accessible tables via raw fetch (no Bearer token).
       // Using raw fetch avoids 401 when supabase-js attaches an expired Bearer.
+      const chaptersPath = classId
+        ? `chapters?select=*&class_id=eq.${classId}&order=order_index.asc`
+        : 'chapters?select=*&order=order_index.asc';
       const [chaptersRes, tasksRes, questionsRes, promptsRes] = await Promise.all([
-        anonFetch<RawChapter>('chapters?select=*&order=order_index.asc'),
+        anonFetch<RawChapter>(chaptersPath),
         anonFetch<RawChapterTask>('chapter_tasks?select=*&order=task_order.asc'),
         anonFetch<QuestionRow>('mcq_questions?select=*&order=question_order.asc'),
         anonFetch<RawPrompt>('pengayaan_prompts?select=*'),
@@ -250,7 +259,7 @@ export function useChapters(refreshKey: number | string = 0) {
 
     load();
     return () => { cancelled = true; };
-  }, [refreshKey]);
+  }, [refreshKey, classId]);
 
   return { chapters, loading };
 }
@@ -279,16 +288,15 @@ export async function verifyUsernamePassword(
   }
 }
 
-export function useStudentProgress() {
+export function useStudentProgress(classId?: string | null) {
   const [progress, setProgress] = useState<StudentProgressMap>({});
   const [user, setUser] = useState<ReturnType<typeof normalizeUser>>(null);
 
   async function load(userId: string) {
-    // Get all chapter IDs to build progress map dynamically
-    const { data: chapterList } = await supabase
-      .from('chapters')
-      .select('id')
-      .order('order_index', { ascending: true });
+    // Get chapter IDs — filtered by class if student has one
+    let query = supabase.from('chapters').select('id').order('order_index', { ascending: true });
+    if (classId) query = query.eq('class_id', classId);
+    const { data: chapterList } = await query;
 
     const allChapterIds = (chapterList ?? []).map(c => c.id);
 
@@ -804,47 +812,41 @@ export async function updateChapterMaterial(
   }
 }
 
-export async function createEmptyChapter(): Promise<{ ok: boolean; id?: string; message: string }> {
+export async function createEmptyChapter(classId?: string): Promise<{ ok: boolean; id?: string; message: string }> {
   try {
-    // Find next available bab number
-    const { data: existing, error: selectErr } = await supabase
-      .from('chapters')
-      .select('id, order_index')
-      .order('order_index', { ascending: false })
-      .limit(1);
+    // Generate proper UUID
+    const babId = crypto.randomUUID();
 
-    if (selectErr) throw selectErr;
+    const insertData: Record<string, unknown> = {
+      id: babId,
+      order_index: 1,
+      title: 'Bab Baru',
+      subtitle: 'Deskripsi singkat bab ini',
+      description: 'Tulis deskripsi lengkap bab di sini.',
+      material_content: '',
+      material_video_url: null,
+      cover_emoji: '📖',
+      cover_color: 'from-green-100 to-emerald-200',
+    };
 
-    const nextNum = existing && existing.length > 0
-      ? (existing[0].order_index ?? existing.length) + 1
-      : 1;
+    if (classId) {
+      insertData.class_id = classId;
+      // Find next order_index for this class
+      const { data: existing } = await supabase
+        .from('chapters')
+        .select('order_index')
+        .eq('class_id', classId)
+        .order('order_index', { ascending: false })
+        .limit(1);
 
-    const babId = `bab-${nextNum}`;
-
-    // Check if this ID already exists
-    const { data: dup } = await supabase
-      .from('chapters')
-      .select('id')
-      .eq('id', babId)
-      .maybeSingle();
-
-    if (dup) {
-      return { ok: false, message: `Bab ID ${babId} sudah ada. Gunakan seed script.` };
+      if (existing && existing.length > 0) {
+        insertData.order_index = (existing[0].order_index ?? 0) + 1;
+      }
     }
 
     const { error: insertErr } = await supabase
       .from('chapters')
-      .insert({
-        id: babId,
-        order_index: nextNum,
-        title: 'Bab Baru',
-        subtitle: 'Deskripsi singkat bab ini',
-        description: 'Tulis deskripsi lengkap bab di sini.',
-        material_content: '',
-        material_video_url: null,
-        cover_emoji: '📖',
-        cover_color: 'from-green-100 to-emerald-200',
-      });
+      .insert(insertData);
 
     if (insertErr) throw insertErr;
 
@@ -879,5 +881,226 @@ export async function updateChapterMetadata(
   } catch (err) {
     console.error('updateChapterMetadata failed:', err);
     return false;
+  }
+}
+
+// ── Class System Hooks ─────────────────────────────────────────
+
+export function useTeacherClasses() {
+  const [classes, setClasses] = useState<ClassEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      setLoading(true);
+      const { data: userData } = await supabase.auth.getUser();
+      const myId = userData.user?.id;
+      if (!myId) {
+        if (!cancelled) { setClasses([]); setLoading(false); }
+        return;
+      }
+
+      // Get classes via teacher_class_assignments
+      const { data: assignments, error } = await supabase
+        .from('teacher_class_assignments')
+        .select('classes(*)')
+        .eq('teacher_id', myId);
+
+      if (error) {
+        console.error('useTeacherClasses failed:', error);
+        if (!cancelled) setLoading(false);
+        return;
+      }
+
+      const mapped: ClassEntry[] = (assignments ?? [])
+        .map(a => {
+          const c = Array.isArray(a.classes) ? a.classes[0] : a.classes;
+          return {
+            id: c?.id ?? '',
+            name: c?.name ?? '',
+            description: c?.description ?? '',
+            teacherId: c?.teacher_id ?? '',
+            semester: c?.semester ?? '',
+            createdAt: c?.created_at ?? '',
+            updatedAt: c?.updated_at ?? '',
+          };
+        });
+
+      if (!cancelled) {
+        setClasses(mapped);
+        setLoading(false);
+      }
+    }
+
+    load();
+    return () => { cancelled = true; };
+  }, [refreshKey]);
+
+  return { classes, loading, refreshClasses: () => setRefreshKey(k => k + 1) };
+}
+
+export function useStudentsByClass(classId: string | null, refreshKey: number = 0) {
+  const [students, setStudents] = useState<Array<{ id: string; username: string; displayName: string | null }>>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!classId) { setStudents([]); return; }
+    let cancelled = false;
+
+    async function load() {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('app_users')
+        .select('id, username, display_name')
+        .eq('class_id', classId)
+        .eq('role', 'student')
+        .order('username', { ascending: true });
+
+      if (error) {
+        console.error('useStudentsByClass failed:', error);
+        if (!cancelled) setLoading(false);
+        return;
+      }
+
+      const mapped = (data ?? []).map(r => ({
+        id: r.id,
+        username: r.username,
+        displayName: r.display_name,
+      }));
+
+      if (!cancelled) {
+        setStudents(mapped);
+        setLoading(false);
+      }
+    }
+
+    load();
+    return () => { cancelled = true; };
+  }, [classId, refreshKey]);
+
+  return { students, loading };
+}
+
+export async function createClass(
+  name: string,
+  description: string,
+  semester: string,
+  teacherId: string,
+): Promise<{ ok: boolean; id?: string; message: string }> {
+  try {
+    const { data, error } = await supabase
+      .from('classes')
+      .insert({ name, description, semester, teacher_id: teacherId })
+      .select('id')
+      .single();
+
+    if (error) throw error;
+    return { ok: true, id: data.id, message: '✅ Kelas berhasil dibuat!' };
+  } catch (err) {
+    console.error('createClass failed:', err);
+    return { ok: false, message: '⚠️ Gagal membuat kelas.' };
+  }
+}
+
+export async function updateClass(
+  classId: string,
+  data: { name?: string; description?: string; semester?: string },
+): Promise<{ ok: boolean; message: string }> {
+  try {
+    const update: Record<string, unknown> = {};
+    if (data.name !== undefined) update.name = data.name;
+    if (data.description !== undefined) update.description = data.description;
+    if (data.semester !== undefined) update.semester = data.semester;
+
+    if (Object.keys(update).length === 0) return { ok: true, message: 'Tidak ada perubahan.' };
+
+    const { error } = await supabase
+      .from('classes')
+      .update(update)
+      .eq('id', classId);
+
+    if (error) throw error;
+    return { ok: true, message: '✅ Kelas berhasil diperbarui!' };
+  } catch (err) {
+    console.error('updateClass failed:', err);
+    return { ok: false, message: '⚠️ Gagal memperbarui kelas.' };
+  }
+}
+
+export async function deleteClass(classId: string): Promise<{ ok: boolean; message: string }> {
+  try {
+    // Unassign all students first
+    const { error: unassignErr } = await supabase
+      .from('app_users')
+      .update({ class_id: null })
+      .eq('class_id', classId);
+    if (unassignErr) throw unassignErr;
+
+    const { error } = await supabase
+      .from('classes')
+      .delete()
+      .eq('id', classId);
+
+    if (error) throw error;
+    return { ok: true, message: '✅ Kelas berhasil dihapus.' };
+  } catch (err) {
+    console.error('deleteClass failed:', err);
+    return { ok: false, message: '⚠️ Gagal menghapus kelas.' };
+  }
+}
+
+export async function addStudentToClass(
+  userId: string,
+  classId: string,
+): Promise<{ ok: boolean; message: string }> {
+  try {
+    const { error } = await supabase
+      .from('app_users')
+      .update({ class_id: classId })
+      .eq('id', userId)
+      .eq('role', 'student');
+
+    if (error) throw error;
+    return { ok: true, message: '✅ Siswa berhasil ditambahkan ke kelas.' };
+  } catch (err) {
+    console.error('addStudentToClass failed:', err);
+    return { ok: false, message: '⚠️ Gagal menambahkan siswa ke kelas.' };
+  }
+}
+
+export async function removeStudentFromClass(
+  userId: string,
+): Promise<{ ok: boolean; message: string }> {
+  try {
+    const { error } = await supabase
+      .from('app_users')
+      .update({ class_id: null })
+      .eq('id', userId);
+
+    if (error) throw error;
+    return { ok: true, message: '✅ Siswa berhasil dikeluarkan dari kelas.' };
+  } catch (err) {
+    console.error('removeStudentFromClass failed:', err);
+    return { ok: false, message: '⚠️ Gagal mengeluarkan siswa dari kelas.' };
+  }
+}
+
+export async function fetchUnassignedStudents(): Promise<Array<{ id: string; username: string; displayName: string | null }>> {
+  try {
+    const { data, error } = await supabase
+      .from('app_users')
+      .select('id, username, display_name')
+      .is('class_id', null)
+      .eq('role', 'student')
+      .order('username', { ascending: true });
+
+    if (error) throw error;
+    return (data ?? []).map(r => ({ id: r.id, username: r.username, displayName: r.display_name }));
+  } catch (err) {
+    console.error('fetchUnassignedStudents failed:', err);
+    return [];
   }
 }

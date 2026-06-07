@@ -105,6 +105,24 @@ export interface ChapterProgress {
   postTestOptionalScore: number | null;
 }
 
+export interface ClassEntry {
+  id: string;
+  name: string;
+  description: string;
+  teacherId: string;
+  semester: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ClassWithStudents extends ClassEntry {
+  students: Array<{
+    id: string;
+    username: string;
+    displayName: string | null;
+  }>;
+}
+
 export interface StudentInfo {
   name: string;
   className: string;

@@ -11,11 +11,13 @@ export interface LmsUser {
   uid: string;
   email: string | null;
   displayName: string | null;
+  classId?: string | null;
 }
 
 interface AuthContextType {
   user: LmsUser | null;
   role: AppRole | null;
+  classId: string | null;
   loading: boolean;
   signIn: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -24,6 +26,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType>({
   user: null,
   role: null,
+  classId: null,
   loading: true,
   signIn: async () => {},
   logout: async () => {},
@@ -44,15 +47,20 @@ function normalizeUser(user: User | null): LmsUser | null {
   };
 }
 
-async function ensureAppUser(user: User): Promise<AppRole | null> {
+interface AppUserInfo {
+  role: AppRole | null;
+  classId: string | null;
+}
+
+async function ensureAppUser(user: User): Promise<AppUserInfo> {
   const { data: existing, error: selectError } = await supabase
     .from('app_users')
-    .select('role')
+    .select('role, class_id')
     .eq('id', user.id)
     .maybeSingle();
 
   if (selectError) console.error('app_users select failed:', selectError);
-  if (existing?.role) return existing.role as AppRole;
+  if (existing?.role) return { role: existing.role as AppRole, classId: existing.class_id ?? null };
 
   // User not in app_users yet — likely a new Google login
   // Auto-register as student for now
@@ -72,20 +80,21 @@ async function ensureAppUser(user: User): Promise<AppRole | null> {
       display_name: displayName,
       role: 'student',
     })
-    .select('role')
+    .select('role, class_id')
     .single();
 
   if (error) {
     console.error('app_users insert failed:', error);
-    return null;
+    return { role: null, classId: null };
   }
 
-  return (data?.role as AppRole) ?? 'student';
+  return { role: (data?.role as AppRole) ?? 'student', classId: data?.class_id ?? null };
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<LmsUser | null>(null);
   const [role, setRole] = useState<AppRole | null>(null);
+  const [classId, setClassId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const loginAttempts = useRef(0);
   const loginBlockedUntil = useRef(0);
@@ -103,9 +112,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // setLoading(false) must fire immediately so the UI isn't stuck
       // on a loading spinner while auth-dependent queries resolve.
       if (supabaseUser) {
-        ensureAppUser(supabaseUser).then(r => { if (active) setRole(r); });
+        ensureAppUser(supabaseUser).then(r => { if (active) { setRole(r.role); setClassId(r.classId); } });
       } else {
         setRole(null);
+        setClassId(null);
       }
       if (active) setLoading(false);
     }
@@ -116,9 +126,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const supabaseUser = session?.user ?? null;
       setUser(normalizeUser(supabaseUser));
       if (supabaseUser) {
-        ensureAppUser(supabaseUser).then(r => { if (active) setRole(r); });
+        ensureAppUser(supabaseUser).then(r => { if (active) { setRole(r.role); setClassId(r.classId); } });
       } else {
         setRole(null);
+        setClassId(null);
       }
       setLoading(false);
     });
@@ -163,7 +174,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, role, loading, signIn, logout }}>
+    <AuthContext.Provider value={{ user, role, classId, loading, signIn, logout }}>
       {children}
     </AuthContext.Provider>
   );

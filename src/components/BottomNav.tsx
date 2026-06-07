@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 
-const tabs = [
+const tabs: Array<{ href: string; label: string; icon: string; roles?: string[] }> = [
   { href: '/dashboard', label: 'Dashboard', icon: '🏠' },
   { href: '/materi', label: 'Materi', icon: '📚' },
   { href: '/tugas', label: 'Tugas', icon: '📝' },
@@ -12,12 +12,14 @@ const tabs = [
 
 export default function BottomNav() {
   const pathname = usePathname();
-  const { logout } = useAuth();
+  const { role, logout } = useAuth();
+  const isTeacher = role === 'teacher' || role === 'admin';
 
   return (
     <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-[#1F3D30]/10 z-40 safe-bottom">
       <div className="flex justify-around items-center h-16">
         {tabs.map(t => {
+          if (t.roles && !t.roles.includes(role ?? 'student')) return null;
           const active = pathname.startsWith(t.href);
           return (
             <Link

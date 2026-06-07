@@ -1,7 +1,7 @@
 'use client';
 
 import { useAuth } from '@/lib/AuthContext';
-import { useChapters, useStudentProgress, useNilai, computeTaskInbox, resetUserProgress, resetPrototypeData } from '@/lib/supabase-data';
+import { useChapters, useStudentProgress, useNilai, computeTaskInbox, resetUserProgress, resetPrototypeData, useTeacherClasses } from '@/lib/supabase-data';
 import Link from 'next/link';
 import { useState } from 'react';
 
@@ -10,6 +10,7 @@ export default function DashboardPage() {
   const { chapters, loading: chLoading } = useChapters();
   const { progress } = useStudentProgress();
   const { scores } = useNilai();
+  const { classes: teacherClasses } = useTeacherClasses();
   const [resetting, setResetting] = useState(false);
   const [resetMsg, setResetMsg] = useState<string | null>(null);
   const [confirmReset, setConfirmReset] = useState(false);
@@ -121,6 +122,19 @@ export default function DashboardPage() {
           </div>
         )}
       </div>
+
+      {/* Teacher quick overview */}
+      {isTeacher && teacherClasses.length > 0 && (
+        <Link href="/materi" className="block bg-white rounded-2xl border border-[#1F3D30]/5 p-4 hover:border-[#1F3D30]/15 transition-colors">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-xl bg-[#1F3D30]/5 flex items-center justify-center text-2xl">🏫</div>
+            <div className="flex-1">
+              <p className="font-bold text-[#1F3D30]">{teacherClasses.length} Kelas</p>
+              <p className="text-xs text-[#5C7A6E]">Pilih kelas untuk mulai mengajar →</p>
+            </div>
+          </div>
+        </Link>
+      )}
 
       {!currentChapter ? (
         <div className="bg-white rounded-2xl border border-[#1F3D30]/5 p-8 text-center space-y-4">

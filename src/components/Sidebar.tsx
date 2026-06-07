@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 
-const links = [
+const links: Array<{ href: string; label: string; icon: string; roles?: string[] }> = [
   { href: '/dashboard', label: 'Dashboard', icon: '🏠' },
   { href: '/materi', label: 'Materi', icon: '📚' },
   { href: '/tugas', label: 'Tugas', icon: '📝' },
@@ -12,7 +12,7 @@ const links = [
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const { user, logout } = useAuth();
+  const { user, role, logout } = useAuth();
 
   return (
     <aside className="hidden lg:flex fixed left-0 top-0 h-full w-64 bg-white border-r border-[#1F3D30]/5 flex-col z-30">
@@ -27,6 +27,7 @@ export default function Sidebar() {
       </div>
       <nav className="flex-1 p-4 space-y-1">
         {links.map(l => {
+          if (l.roles && !l.roles.includes(role ?? 'student')) return null;
           const active = pathname.startsWith(l.href);
           return (
             <Link
