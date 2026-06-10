@@ -4,17 +4,16 @@ import { usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 
 const tabs: Array<{ href: string; label: string; icon: string; roles?: string[] }> = [
-  { href: '/dashboard', label: 'Dashboard', icon: '🏠' },
-  { href: '/materi', label: 'Materi', icon: '📚' },
-  { href: '/tugas', label: 'Tugas', icon: '📝' },
-  { href: '/nilai', label: 'Nilai', icon: '📊' },
+  { href: '/dashboard', label: 'Dashboard', icon: '🏠', roles: ['student', 'teacher'] },
+  { href: '/materi', label: 'Materi', icon: '📚', roles: ['student', 'teacher'] },
+  { href: '/tugas', label: 'Tugas', icon: '📝', roles: ['student', 'teacher'] },
+  { href: '/nilai', label: 'Nilai', icon: '📊', roles: ['student', 'teacher'] },
   { href: '/admin', label: 'Admin Panel', icon: '⚙️', roles: ['admin'] },
 ];
 
 export default function BottomNav() {
   const pathname = usePathname();
   const { role, logout } = useAuth();
-  const isTeacher = role === 'teacher' || role === 'admin';
 
   return (
     <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-[#1F3D30]/10 z-40 safe-bottom">

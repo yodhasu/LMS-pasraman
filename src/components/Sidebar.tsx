@@ -4,10 +4,10 @@ import { usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 
 const links: Array<{ href: string; label: string; icon: string; roles?: string[] }> = [
-  { href: '/dashboard', label: 'Dashboard', icon: '🏠' },
-  { href: '/materi', label: 'Materi', icon: '📚' },
-  { href: '/tugas', label: 'Tugas', icon: '📝' },
-  { href: '/nilai', label: 'Nilai', icon: '📊' },
+  { href: '/dashboard', label: 'Dashboard', icon: '🏠', roles: ['student', 'teacher'] },
+  { href: '/materi', label: 'Materi', icon: '📚', roles: ['student', 'teacher'] },
+  { href: '/tugas', label: 'Tugas', icon: '📝', roles: ['student', 'teacher'] },
+  { href: '/nilai', label: 'Nilai', icon: '📊', roles: ['student', 'teacher'] },
   { href: '/admin', label: 'Admin Panel', icon: '⚙️', roles: ['admin'] },
 ];
 
