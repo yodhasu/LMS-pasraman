@@ -36,12 +36,12 @@ export default function LoginPage() {
         {/* Hero */}
         <div className="text-center mb-8">
           <div className="inline-block px-4 py-1.5 rounded-full bg-[#1F3D30]/8 text-[#1F3D30] text-xs font-semibold mb-4 tracking-wide">
-            Pendidikan Agama Hindu
+            Pendidikan Agama Hindu 🕉️
           </div>
-          <div className="flex items-center justify-center gap-2 mb-1">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#C8A84E] to-[#E8C84E] flex items-center justify-center text-white text-lg">🕉️</div>
+          <div className="flex items-center justify-center gap-3 mb-1">
+            <img src="/logo-pasraman.png" alt="Logo Pasraman" className="w-14 h-14 rounded-xl" />
             <h1 className="text-2xl font-extrabold text-[#1F3D30] tracking-tight">
-              LMS <span className="text-[#C8A84E]">Pasraman</span>
+              Pasraman <span className="text-[#C8A84E]">Wira Satya Bhuana</span>
             </h1>
           </div>
           <p className="text-sm text-[#5C7A6E] mt-2">Login dengan akun yang diberikan guru</p>

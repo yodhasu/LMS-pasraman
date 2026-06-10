@@ -3,8 +3,8 @@ import './globals.css';
 import ClientLayout from './ClientLayout';
 
 export const metadata: Metadata = {
-  title: 'LMS Pasraman',
-  description: 'LMS Pendidikan Agama Hindu — Pasraman Digital',
+  title: 'Pasraman Wira Satya Bhuana',
+  description: 'LMS Pendidikan Agama Hindu — Pasraman Wira Satya Bhuana',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
