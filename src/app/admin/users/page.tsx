@@ -60,7 +60,9 @@ function UserForm({ mode, initial, classes, onSave, onClose }: {
       username: username.trim(),
       displayName: displayName.trim(),
       role,
-      classId: role === 'student' ? (classId || null) : null,
+      classId: role === 'student'
+        ? (classId || '00000000-0000-0000-0000-000000000000')
+        : null,
     });
     setSaving(false);
   };
