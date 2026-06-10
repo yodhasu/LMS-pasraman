@@ -49,11 +49,7 @@ function TeacherTugasView() {
         </select>
       </div>
 
-      {!selectedClassId ? (
-        <div className="bg-white rounded-2xl border border-[#1F3D30]/5 p-8 text-center">
-          <p className="text-lg">👆 Pilih kelas untuk melihat tugas</p>
-        </div>
-      ) : loading ? (
+      {!selectedClassId ? null : loading ? (
         <div className="flex items-center justify-center py-8">
           <div className="w-8 h-8 border-2 border-[#e8efe4] border-t-[#1F3D30] rounded-full animate-spin" />
         </div>
