@@ -307,47 +307,10 @@ export default function DashboardPage() {
     return (
       <div className="max-w-2xl mx-auto space-y-6">
 
-        {/* Header + Reset */}
+        {/* Header */}
         <div>
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-xl lg:text-2xl font-bold text-[#1F3D30]">Om Swastyastu, {displayName} 🙏</h1>
-              <p className="text-sm text-[#5C7A6E] mt-0.5">Kelola kelas belajar</p>
-            </div>
-            {confirmReset ? (
-              <div className="flex gap-2">
-                <button
-                  onClick={handleReset}
-                  disabled={resetting}
-                  className="text-xs text-red-600 bg-red-100 rounded-xl px-3 py-1.5 font-semibold disabled:opacity-50"
-                >
-                  {resetting ? '⏳' : '⚠️ Yakin, Reset'}
-                </button>
-                <button
-                  onClick={() => setConfirmReset(false)}
-                  className="text-xs text-[#5C7A6E] underline underline-offset-2"
-                >
-                  Batal
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={() => setConfirmReset(true)}
-                disabled={resetting}
-                className="text-xs text-[#5C7A6E] hover:text-[#1F3D30] underline underline-offset-2 disabled:opacity-50 flex-shrink-0"
-                title="Balikin seluruh data prototype ke baseline awal"
-              >
-                {resetting ? '⏳' : '🔁 Reset Prototype'}
-              </button>
-            )}
-          </div>
-          {resetMsg && (
-            <div className={`mt-2 text-xs font-medium px-3 py-1.5 rounded-lg ${
-              resetMsg.startsWith('✅') ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'
-            }`}>
-              {resetMsg}
-            </div>
-          )}
+          <h1 className="text-xl lg:text-2xl font-bold text-[#1F3D30]">Om Swastyastu, {displayName} 🙏</h1>
+          <p className="text-sm text-[#5C7A6E] mt-0.5">Kelola kelas belajar</p>
         </div>
 
         {/* Class cards */}

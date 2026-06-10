@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
-import { Chapter, ChapterMaterial, ChapterProgressDetail, ClassChapterProgress, ClassEntry, ClassProgressResult, MaterialProgressMap, QuestionView, ScoreRecord, StudentProgressMap, StudentSubmissionView, TaskInboxItem, TeacherTaskItem } from '@/lib/types';
+import { Chapter, ChapterMaterial, ChapterProgressDetail, AdminUserRow, ClassChapterProgress, ClassEntry, ClassProgressResult, CreateUserInput, MaterialProgressMap, QuestionView, ScoreRecord, StudentProgressMap, StudentSubmissionView, TaskInboxItem, TeacherTaskItem } from '@/lib/types';
 import { CHAPTERS } from './mock-data';
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -1493,4 +1493,120 @@ export function useTaskGradingDetail(
   /* eslint-enable react-hooks/set-state-in-effect */
 
   return { title, description, questions, submissions, loading, error };
+}
+
+// ── Admin: Fetch all classes (for user assignment dropdown) ──
+
+export function useAllClasses() {
+  const [classes, setClasses] = useState<Array<{ id: string; name: string }>>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    supabase.from('classes').select('id, name').order('name').then(({ data, error }) => {
+      if (cancelled) return;
+      if (error) { console.error('useAllClasses error:', error); setLoading(false); return; }
+      setClasses(data ?? []);
+      setLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  return { classes, loading };
+}
+
+// ── Admin User Management Hooks ──
+
+export function useAllUsers() {
+  const [users, setUsers] = useState<AdminUserRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  async function load() {
+    setLoading(true);
+    setError(null);
+    const { data, error: rpcErr } = await supabase.rpc('admin_get_users');
+    if (rpcErr) {
+      console.error('useAllUsers RPC error:', rpcErr);
+      setError('Gagal memuat data user.');
+      setLoading(false);
+      return;
+    }
+    const mapped: AdminUserRow[] = (data ?? []).map((r: any) => ({
+      id: r.id,
+      username: r.username ?? '',
+      displayName: r.display_name ?? r.username ?? '',
+      role: r.role ?? 'student',
+      classId: r.class_id ?? null,
+      className: r.class_name ?? null,
+      createdAt: r.created_at ?? '',
+    }));
+    setUsers(mapped);
+    setLoading(false);
+  }
+
+  useEffect(() => { load(); }, []);
+
+  return { users, loading, error, refresh: load };
+}
+
+export async function adminCreateUser(
+  input: CreateUserInput,
+): Promise<{ ok: boolean; userId?: string; password?: string; message: string }> {
+  try {
+    const res = await fetch('/api/admin/create-user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.message);
+    return data;
+  } catch (err: any) {
+    console.error('adminCreateUser error:', err);
+    return { ok: false, message: `⚠️ Gagal membuat user: ${err.message ?? 'unknown error'}` };
+  }
+}
+
+export async function adminUpdateUser(
+  userId: string,
+  data: { displayName?: string; role?: string; classId?: string | null },
+): Promise<{ ok: boolean; message: string }> {
+  try {
+    const { error } = await supabase.rpc('admin_update_user', {
+      p_user_id: userId,
+      p_display_name: data.displayName ?? null,
+      p_role: data.role ?? null,
+      p_class_id: data.classId ?? null,
+    });
+    if (error) throw error;
+    return { ok: true, message: '✅ User berhasil diperbarui!' };
+  } catch (err: any) {
+    console.error('adminUpdateUser error:', err);
+    return { ok: false, message: `⚠️ Gagal memperbarui user: ${err.message ?? 'unknown error'}` };
+  }
+}
+
+export async function adminDeleteUser(userId: string): Promise<{ ok: boolean; message: string }> {
+  try {
+    const { data, error } = await supabase.rpc('admin_delete_user', { p_user_id: userId });
+    if (error) throw error;
+    const result = data as { ok: boolean; message: string } | null;
+    return result ?? { ok: false, message: '⚠️ Gagal menghapus user.' };
+  } catch (err: any) {
+    console.error('adminDeleteUser error:', err);
+    return { ok: false, message: `⚠️ Gagal menghapus user: ${err.message ?? 'unknown error'}` };
+  }
+}
+
+export async function adminResetPassword(userId: string): Promise<{ ok: boolean; password?: string; message: string }> {
+  try {
+    const { data, error } = await supabase.rpc('admin_reset_password', { p_user_id: userId });
+    if (error) throw error;
+    const result = data as { ok: boolean; message: string; password?: string } | null;
+    return result ?? { ok: false, message: '⚠️ Gagal reset password.' };
+  } catch (err: any) {
+    console.error('adminResetPassword error:', err);
+    return { ok: false, message: `⚠️ Gagal reset password: ${err.message ?? 'unknown error'}` };
+  }
 }
