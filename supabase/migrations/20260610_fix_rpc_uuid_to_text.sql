@@ -42,8 +42,9 @@ begin
     values (p_chapter_id, p_pengayaan->>'instruction');
   end if;
 
+  -- Fix: cast jsonb-extracted id to uuid for comparison with uuid column
   delete from public.chapter_materials where chapter_id = p_chapter_id
-    and id not in (select value->>'id' from jsonb_array_elements(p_materials) where value->>'id' is not null);
+    and id not in (select (value->>'id')::uuid from jsonb_array_elements(p_materials) where value->>'id' is not null);
   
   if jsonb_array_length(p_materials) > 0 then
     for v_item in select * from jsonb_array_elements(p_materials)
