@@ -106,7 +106,11 @@ export default function NilaiPage() {
         </select>
       </div>
 
-      {!selectedClassId ? null : students.length === 0 ? (
+      {!selectedClassId ? (
+        <div className="bg-white rounded-2xl border border-[#1F3D30]/5 p-8 text-center">
+          <p className="text-lg">👆 Pilih kelas untuk melihat nilai siswa</p>
+        </div>
+      ) : students.length === 0 ? (
         <div className="bg-white rounded-2xl border border-[#1F3D30]/5 p-8 text-center">
           <p className="text-lg">📭 Belum ada siswa di kelas ini</p>
         </div>
