@@ -5,13 +5,15 @@ import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 
 export default function Home() {
-  const { user, loading } = useAuth();
+  const { user, role, loading } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
     if (loading) return;
-    router.replace(user ? '/dashboard' : '/login');
-  }, [user, loading, router]);
+    if (!user) router.replace('/login');
+    else if (role === 'admin') router.replace('/admin');
+    else router.replace('/dashboard');
+  }, [user, role, loading, router]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#FBF8F4]">
