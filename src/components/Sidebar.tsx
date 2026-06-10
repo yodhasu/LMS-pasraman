@@ -18,9 +18,10 @@ export default function Sidebar() {
     <aside className="hidden lg:flex fixed left-0 top-0 h-full w-64 bg-white border-r border-[#1F3D30]/5 flex-col z-30">
       <div className="p-6 border-b border-[#1F3D30]/5">
         <Link href="/dashboard" className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#C8A84E] to-[#E8C84E] flex items-center justify-center text-white text-lg">🕉️</div>
+          <img src="/logo-pasraman.png" alt="Logo Pasraman" className="w-10 h-10 rounded-xl" />
           <div>
-            <span className="font-bold text-[#1F3D30] text-base">LMS Pasraman</span>
+            <span className="font-bold text-[#1F3D30] text-sm leading-tight block">Pasraman Wira</span>
+            <span className="font-bold text-[#C8A84E] text-sm leading-tight">Satya Bhuana</span>
             <p className="text-[11px] text-[#8A9E95]">Pendidikan Hindu</p>
           </div>
         </Link>
