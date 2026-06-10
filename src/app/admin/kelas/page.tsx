@@ -1,14 +1,14 @@
 'use client';
 
 import { useAuth } from '@/lib/AuthContext';
-import { useTeacherClasses, useStudentsByClass, createClass, updateClass, deleteClass, addStudentToClass, removeStudentFromClass, fetchUnassignedStudents } from '@/lib/supabase-data';
+import { useAdminClasses, useStudentsByClass, createClass, updateClass, deleteClass, addStudentToClass, removeStudentFromClass, fetchUnassignedStudents } from '@/lib/supabase-data';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, useCallback } from 'react';
 
 export default function AdminKelasPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
-  const { classes, loading: clsLoading, refreshClasses } = useTeacherClasses();
+  const { classes, loading: clsLoading, refreshClasses } = useAdminClasses();
   const [selectedClass, setSelectedClass] = useState<string | null>(null);
   const [studentRefreshKey, setStudentRefreshKey] = useState(0);
   const { students, loading: stdLoading } = useStudentsByClass(selectedClass, studentRefreshKey);

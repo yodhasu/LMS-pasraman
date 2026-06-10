@@ -892,6 +892,50 @@ export async function updateChapterMetadata(
 
 // ── Class System Hooks ─────────────────────────────────────────
 
+export function useAdminClasses() {
+  const [classes, setClasses] = useState<ClassEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('classes')
+        .select('*')
+        .order('name', { ascending: true });
+
+      if (error) {
+        console.error('useAdminClasses failed:', error);
+        if (!cancelled) setLoading(false);
+        return;
+      }
+
+      const mapped: ClassEntry[] = (data ?? []).map(c => ({
+        id: c.id ?? '',
+        name: c.name ?? '',
+        description: c.description ?? '',
+        teacherId: c.teacher_id ?? '',
+        semester: c.semester ?? '',
+        createdAt: c.created_at ?? '',
+        updatedAt: c.updated_at ?? '',
+      }));
+
+      if (!cancelled) {
+        setClasses(mapped);
+        setLoading(false);
+      }
+    }
+
+    load();
+    return () => { cancelled = true; };
+  }, [refreshKey]);
+
+  return { classes, loading, refreshClasses: () => setRefreshKey(k => k + 1) };
+}
+
 export function useTeacherClasses() {
   const [classes, setClasses] = useState<ClassEntry[]>([]);
   const [loading, setLoading] = useState(true);
