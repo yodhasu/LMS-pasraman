@@ -63,7 +63,7 @@ export default function NilaiPage() {
 
     load();
     return () => { cancelled = true; };
-  }, [selectedClassId, isTeacher]);
+  }, [selectedClassId, isTeacher, students]);
 
   if (chLoading) {
     return (
