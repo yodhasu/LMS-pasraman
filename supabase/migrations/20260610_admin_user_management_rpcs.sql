@@ -12,7 +12,7 @@ as $$
   select exists (select 1 from public.app_users where id = auth.uid() and role = 'admin');
 $$;
 
--- ── 1. List all users (teachers can also view users) ──
+-- ── 1. List all users (admin only) ──
 create or replace function public.admin_get_users()
 returns table(
   id uuid,
@@ -28,8 +28,8 @@ security definer
 set search_path = public, extensions
 as $$
 begin
-  if not public.is_teacher_or_admin() then
-    raise exception 'admin/teacher only';
+  if not public.is_admin() then
+    raise exception 'admin only';
   end if;
 
   return query
