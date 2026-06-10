@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
-import { Chapter, ChapterMaterial, ChapterProgressDetail, ClassEntry, MaterialProgressMap, QuestionView, ScoreRecord, StudentProgressMap, StudentSubmissionView, TaskInboxItem, TeacherTaskItem } from '@/lib/types';
+import { Chapter, ChapterMaterial, ChapterProgressDetail, ClassChapterProgress, ClassEntry, ClassProgressResult, MaterialProgressMap, QuestionView, ScoreRecord, StudentProgressMap, StudentSubmissionView, TaskInboxItem, TeacherTaskItem } from '@/lib/types';
 import { CHAPTERS } from './mock-data';
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -371,6 +371,7 @@ export function useChapterMaterials(chapterId: string | null, refreshKey: number
   const [matProgress, setMatProgress] = useState<MaterialProgressMap>({});
   const [loading, setLoading] = useState(true);
 
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (!chapterId) { setLoading(false); return; }
     let cancelled = false;
@@ -427,6 +428,7 @@ export function useChapterMaterials(chapterId: string | null, refreshKey: number
 
     return () => { cancelled = true; subscription.unsubscribe(); };
   }, [chapterId, refreshKey]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   return { materials, matProgress, loading };
 }
@@ -950,6 +952,7 @@ export function useStudentsByClass(classId: string | null, refreshKey: number = 
   const [students, setStudents] = useState<Array<{ id: string; username: string; displayName: string | null }>>([]);
   const [loading, setLoading] = useState(false);
 
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (!classId) { setStudents([]); return; }
     let cancelled = false;
@@ -984,8 +987,108 @@ export function useStudentsByClass(classId: string | null, refreshKey: number = 
     load();
     return () => { cancelled = true; };
   }, [classId, refreshKey]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   return { students, loading };
+}
+
+export function useClassProgress(classId: string | null) {
+  const [result, setResult] = useState<ClassProgressResult | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (!classId) { setResult(null); return; }
+    let cancelled = false;
+
+    async function load() {
+      setLoading(true);
+
+      // 1. Get students in this class
+      const { data: students } = await supabase
+        .from('app_users')
+        .select('id')
+        .eq('class_id', classId)
+        .eq('role', 'student');
+
+      if (!students || students.length === 0) {
+        if (!cancelled) {
+          setResult({ totalStudents: 0, chapters: [], overallPct: 0, completedChapters: 0, totalChapters: 0 });
+          setLoading(false);
+        }
+        return;
+      }
+
+      const studentIds = students.map(s => s.id);
+
+      // 2. Get chapters for this class
+      const { data: chapters, error: chErr } = await supabase
+        .from('chapters')
+        .select('id, title, subtitle, cover_emoji, cover_color, order_index')
+        .eq('class_id', classId)
+        .order('order_index', { ascending: true });
+
+      if (chErr || !chapters) {
+        console.error('useClassProgress: chapters fetch failed', chErr);
+        if (!cancelled) setLoading(false);
+        return;
+      }
+
+      // 3. Get chapter_progress for these students
+      const { data: progress, error: prErr } = await supabase
+        .from('chapter_progress')
+        .select('chapter_id, pretest, materi, tugas, posttest, complete')
+        .in('user_id', studentIds);
+
+      if (prErr) {
+        console.error('useClassProgress: progress fetch failed', prErr);
+        if (!cancelled) setLoading(false);
+        return;
+      }
+
+      // 4. Aggregate per chapter
+      const totalStudents = studentIds.length;
+      const chapterStats: ClassChapterProgress[] = chapters.map(ch => {
+        const rows = (progress ?? []).filter(p => p.chapter_id === ch.id);
+        return {
+          id: ch.id,
+          orderIndex: ch.order_index,
+          title: ch.title,
+          subtitle: ch.subtitle || '',
+          emoji: ch.cover_emoji || '📖',
+          color: ch.cover_color || '#1F3D30',
+          preTestCount: rows.filter(p => p.pretest === true).length,
+          materiCount: rows.filter(p => p.materi === true).length,
+          tugasCount: rows.filter(p => p.tugas === true).length,
+          postTestCount: rows.filter(p => p.posttest === true).length,
+          completeCount: rows.filter(p => p.complete === true).length,
+        };
+      });
+
+      // Chapter is "completed" when ALL students finished it
+      const completedChapters = chapterStats.filter(c => c.completeCount === totalStudents).length;
+      const totalPossible = totalStudents * 5 * chapters.length;
+      const actualDone = chapterStats.reduce((sum, ch) =>
+        sum + ch.preTestCount + ch.materiCount + ch.tugasCount + ch.postTestCount + ch.completeCount, 0);
+
+      if (!cancelled) {
+        setResult({
+          totalStudents,
+          chapters: chapterStats,
+          overallPct: totalPossible > 0 ? Math.round((actualDone / totalPossible) * 100) : 0,
+          completedChapters,
+          totalChapters: chapters.length,
+        });
+        setLoading(false);
+      }
+    }
+
+    load();
+    return () => { cancelled = true; };
+  }, [classId]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  return { progress: result, loading };
 }
 
 export async function createClass(
@@ -1116,6 +1219,7 @@ export function useTeacherTasks(classId: string | null) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (!classId) { setTasks([]); setLoading(false); setError(null); return; }
     let cancelled = false;
@@ -1168,7 +1272,7 @@ export function useTeacherTasks(classId: string | null) {
 
       // 5. Task submission counts
       const taskIds = (chapterTasks ?? []).map(t => t.id);
-      let taskSubmissionCounts: Record<string, { total: number; graded: number }> = {};
+      const taskSubmissionCounts: Record<string, { total: number; graded: number }> = {};
 
       if (taskIds.length > 0) {
         const { data: submissions } = await supabase
@@ -1184,7 +1288,7 @@ export function useTeacherTasks(classId: string | null) {
       }
 
       // 6. Pengayaan submission counts
-      let pengayaanCounts: Record<string, number> = {};
+      const pengayaanCounts: Record<string, number> = {};
       const penChapterIds = (pengayaanPrompts ?? []).map(p => p.chapter_id);
       if (penChapterIds.length > 0) {
         const { data: penSubs } = await supabase
@@ -1243,6 +1347,7 @@ export function useTeacherTasks(classId: string | null) {
     load();
     return () => { cancelled = true; };
   }, [classId]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   return { tasks, loading, error };
 }
@@ -1258,6 +1363,7 @@ export function useTaskGradingDetail(
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
 
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (!classId) { setLoading(false); return; }
     let cancelled = false;
@@ -1384,6 +1490,7 @@ export function useTaskGradingDetail(
     load();
     return () => { cancelled = true; };
   }, [identifier, classId]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   return { title, description, questions, submissions, loading, error };
 }

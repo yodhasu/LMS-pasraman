@@ -7,11 +7,11 @@ import {
   saveScore, submitTaskAnswer, submitPengayaanLink,
   saveChapterBatch, deleteChapter,
 } from '@/lib/supabase-data';
-import { useAuth } from '@/lib/AuthContext';
+import { useAuth, LmsUser } from '@/lib/AuthContext';
 import MCQTest from '@/components/MCQTest';
 import ChapterContent from '@/components/ChapterContent';
-import { useState, useEffect, useRef } from 'react';
-import { ChapterProgressDetail, Chapter, ChapterMaterial, ChapterTask, MCQ } from '@/lib/types';
+import { useState, useEffect } from 'react';
+import { ChapterProgressDetail, Chapter, ChapterMaterial, ChapterTask, MCQ, PengayaanAnswer } from '@/lib/types';
 import MCQResult from '@/components/MCQResult';
 
 function SectionCard({ step, title, description, done, unlocked, children }: {
@@ -66,7 +66,7 @@ export default function ChapterClient() {
   const { materials, matProgress, loading: matLoading } = useChapterMaterials(chapterId);
   const [pretestResult, setPretestResult] = useState<{ score: number; answers: Record<string, number> } | null>(null);
   const [posttestResult, setPosttestResult] = useState<{ score: number; answers: Record<string, number> } | null>(null);
-  const completedTasksRef = useRef<Record<number, boolean>>({});
+  const [completedTasks, setCompletedTasks] = useState<Record<number, boolean>>({});
 
   const isTeacher = role === 'teacher' || role === 'admin';
   const teacherMode = isTeacher && isTeacherMode;
@@ -74,6 +74,7 @@ export default function ChapterClient() {
 
   // ── Global loading: spinner sampai SEMUA data siap ──
   const [pageReady, setPageReady] = useState(false);
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (chLoading || matLoading) return;
     const chapter = chapters.find(c => c.id === chapterId);
@@ -82,6 +83,7 @@ export default function ChapterClient() {
     const t = setTimeout(() => setPageReady(true), 80);
     return () => clearTimeout(t);
   }, [chLoading, matLoading, chapters, chapterId]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const chapter = chapters.find(c => c.id === chapterId);
   const cIdx = chapter ? chapters.findIndex(c => c.id === chapterId) : -1;
@@ -116,6 +118,7 @@ export default function ChapterClient() {
   const [dataLoaded, setDataLoaded] = useState(false);
 
   // ── Init edit state from DB data ──
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (!chapter || matLoading || dataLoaded) return;
     setEditTitle(chapter.title);
@@ -132,7 +135,8 @@ export default function ChapterClient() {
     setEditPengayaanEnabled(!!chapter.postTestOptional);
     setEditPengayaanText(chapter.postTestOptional?.instruction ?? '');
     setDataLoaded(true);
-  }, [chapter, matLoading, dataLoaded]);
+  }, [chapter, matLoading, dataLoaded, materials]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // ── Computed ──
   const hasPreTest = chapter && chapter.preTest && chapter.preTest.length > 0;
@@ -166,10 +170,11 @@ export default function ChapterClient() {
     if (!submitted) return; // submission failed — don't mark as completed
     await saveScore(user.uid, chapterId, 'tugas', score);
     // Mark this task as completed locally so multi-task chapters don't block
-    completedTasksRef.current[taskIdx] = true;
-    // Check remaining tasks using stale chapter data + local completedTasksRef
+    const nextCompleted = { ...completedTasks, [taskIdx]: true };
+    setCompletedTasks(nextCompleted);
+    // Check remaining tasks using stale chapter data + local completedTasks
     const hasOtherPending = chapter.tasks.some((task, i) => {
-      if (i === taskIdx || completedTasksRef.current[i]) return false;
+      if (i === taskIdx || nextCompleted[i]) return false;
       return !(task.answer || []).some(a => a.userId === user.uid);
     });
     if (!hasOtherPending) {
@@ -668,7 +673,7 @@ export default function ChapterClient() {
         <SectionCard step={hasPreTest ? 3 : 2} title="Tugas" description={teacherView ? "Preview tugas siswa untuk bab ini." : "Kerjakan tugas berikut untuk melanjutkan."} done={teacherView ? true : tasksAllDone} unlocked={teacherView || materialStepDone}>
           <div className="ml-11 space-y-4">
             {chapter.tasks.map((task, tIdx) => {
-              const thisTaskDone = tasksAllDone || (completedTasksRef.current[tIdx]) || (task.answer || []).some(a => a.userId === user?.uid);
+              const thisTaskDone = tasksAllDone || (completedTasks[tIdx]) || (task.answer || []).some(a => a.userId === user?.uid);
               return (
               <div key={task.id} className={`p-4 rounded-xl border ${thisTaskDone ? 'border-emerald-200 bg-emerald-50' : 'border-[#1F3D30]/5 bg-[#FBF8F4]'}`}>
                 <div className="mb-3">
@@ -803,11 +808,11 @@ function PengayaanSection({ step, chapterId, postTestOptional, unlocked, user, d
   chapterId: string;
   postTestOptional: NonNullable<Chapter['postTestOptional']>;
   unlocked: boolean;
-  user: any;
+  user: LmsUser | null;
   displayName: string;
   teacherView: boolean;
 }) {
-  const myAnswer = user ? postTestOptional.answer?.find((a: any) => a.userId === user.uid) : null;
+  const myAnswer = user ? postTestOptional.answer?.find((a: PengayaanAnswer) => a.userId === user.uid) : null;
   const [submittedLocally, setSubmittedLocally] = useState(false);
   const submitted = !!myAnswer || submittedLocally;
   const [link, setLink] = useState('');

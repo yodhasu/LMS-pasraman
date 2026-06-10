@@ -128,11 +128,13 @@ export default function KelasPage() {
     setUnassigned(list);
   }, []);
 
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (showAddStudent && showStudents) {
       loadUnassigned();
     }
   }, [showAddStudent, showStudents, loadUnassigned]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   if (authLoading) {
     return (

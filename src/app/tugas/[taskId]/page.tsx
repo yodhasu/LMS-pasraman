@@ -157,7 +157,7 @@ function TaskDetailContent({ taskId, classId }: { taskId: string; classId: strin
           {submissions.map(student => {
             const isExpanded = expandedStudent === student.studentId;
             let correctCount = 0;
-            let totalQuestions = questions.length;
+            const totalQuestions = questions.length;
 
             if (student.submitted && student.answers && questions.length > 0) {
               for (const q of questions) {

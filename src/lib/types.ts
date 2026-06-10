@@ -83,6 +83,29 @@ export interface StudentProgressMap {
   [chapterId: string]: ChapterProgressDetail;
 }
 
+// ── Aggregate class progress (for teacher dashboard) ──
+export interface ClassChapterProgress {
+  id: string;
+  orderIndex: number;
+  title: string;
+  subtitle: string;
+  emoji: string;
+  color: string;
+  preTestCount: number;    // students who completed pretest
+  materiCount: number;     // students who completed materi
+  tugasCount: number;      // students who completed tugas
+  postTestCount: number;   // students who completed posttest
+  completeCount: number;   // students who completed the chapter
+}
+
+export interface ClassProgressResult {
+  totalStudents: number;
+  chapters: ClassChapterProgress[];
+  overallPct: number;      // % of all possible completions
+  completedChapters: number;
+  totalChapters: number;
+}
+
 // ── Nilai subcollection record ──
 export interface ScoreRecord {
   id: string; // doc ID e.g. "bab-1-pretest"

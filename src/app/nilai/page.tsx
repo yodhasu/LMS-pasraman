@@ -4,6 +4,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { useChapters, useNilai, useTeacherClasses, useStudentsByClass } from '@/lib/supabase-data';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { Chapter, ScoreRecord } from '@/lib/types';
 
 export default function NilaiPage() {
   const { role } = useAuth();
@@ -134,8 +135,18 @@ export default function NilaiPage() {
   );
 }
 
+interface ChapterWithScore {
+  chapter: Chapter;
+  idx: number;
+  pretest?: number;
+  posttest?: number;
+  tugas?: number;
+  pengayaan?: number;
+  isDone: boolean;
+}
+
 // ── Student View (original unchanged) ──
-function StudentView({ chapters, scores }: { chapters: any[]; scores: any[] }) {
+function StudentView({ chapters, scores }: { chapters: Chapter[]; scores: ScoreRecord[] }) {
   const chapterScores: Record<string, { pretest?: number; posttest?: number; tugas?: number; pengayaan?: number }> = {};
   for (const s of scores) {
     if (!chapterScores[s.chapterId]) chapterScores[s.chapterId] = {};
@@ -148,7 +159,7 @@ function StudentView({ chapters, scores }: { chapters: any[]; scores: any[] }) {
     return { chapter: c, idx: i, ...cs, isDone };
   });
 
-  const posttestValues = chaptersWithScores.filter((c: any) => c.posttest !== undefined).map((c: any) => c.posttest!);
+  const posttestValues = chaptersWithScores.filter((c) => c.posttest !== undefined).map((c) => c.posttest!);
   const avgScore = posttestValues.length > 0
     ? Math.round(posttestValues.reduce((a: number, b: number) => a + b, 0) / posttestValues.length)
     : null;
@@ -176,7 +187,7 @@ function StudentView({ chapters, scores }: { chapters: any[]; scores: any[] }) {
       </div>
 
       <div className="space-y-3">
-        {chaptersWithScores.map(({ chapter, idx, pretest, posttest, tugas, pengayaan, isDone }: any) => {
+        {chaptersWithScores.map(({ chapter, idx, pretest, posttest, tugas, pengayaan, isDone }: ChapterWithScore) => {
           const hasScores = pretest !== undefined || posttest !== undefined || tugas !== undefined;
           const delta = pretest !== undefined && posttest !== undefined ? posttest - pretest : null;
 
@@ -240,7 +251,7 @@ function StudentScoreCard({
   chapterScores,
 }: {
   student: { id: string; username: string; displayName: string | null };
-  chapters: any[];
+  chapters: Chapter[];
   chapterScores: Record<string, { pretest?: number; posttest?: number; tugas?: number; pengayaan?: number }>;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -288,7 +299,7 @@ function StudentScoreCard({
 
       {expanded && (
         <div className="px-5 pb-5 space-y-3">
-          {chapters.map((chapter: any, i: number) => {
+          {chapters.map((chapter: Chapter, i: number) => {
             const cs = chapterScores[chapter.id];
             if (!cs || (cs.pretest === undefined && cs.posttest === undefined && cs.tugas === undefined && cs.pengayaan === undefined)) {
               return null;
