@@ -1256,6 +1256,108 @@ export async function fetchUnassignedStudents(): Promise<Array<{ id: string; use
   }
 }
 
+// ── Admin: Teacher-Class Assignment ────────────────────────────
+
+export function useClassTeachers(classId: string | null, refreshKey: number = 0) {
+  const [teachers, setTeachers] = useState<Array<{ id: string; username: string; displayName: string | null }>>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!classId) { setTeachers([]); return; }
+    let cancelled = false;
+
+    async function load() {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('teacher_class_assignments')
+        .select('teacher_id, app_users(id, username, display_name)')
+        .eq('class_id', classId);
+
+      if (error) {
+        console.error('useClassTeachers failed:', error);
+        if (!cancelled) setLoading(false);
+        return;
+      }
+
+      const mapped = (data ?? []).map(r => {
+        const u = Array.isArray(r.app_users) ? r.app_users[0] : r.app_users;
+        return {
+          id: u?.id ?? '',
+          username: u?.username ?? '',
+          displayName: u?.display_name ?? null,
+        };
+      });
+
+      if (!cancelled) { setTeachers(mapped); setLoading(false); }
+    }
+
+    load();
+    return () => { cancelled = true; };
+  }, [classId, refreshKey]);
+
+  return { teachers, loading };
+}
+
+export function useAvailableTeachers() {
+  const [teachers, setTeachers] = useState<Array<{ id: string; username: string; displayName: string | null }>>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    supabase
+      .from('app_users')
+      .select('id, username, display_name')
+      .eq('role', 'teacher')
+      .order('username')
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (error) { console.error('useAvailableTeachers error:', error); setLoading(false); return; }
+        setTeachers((data ?? []).map(r => ({ id: r.id, username: r.username, displayName: r.display_name })));
+        setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  return { teachers, loading };
+}
+
+export async function assignTeacherToClass(
+  teacherId: string,
+  classId: string,
+): Promise<{ ok: boolean; message: string }> {
+  try {
+    const { error } = await supabase
+      .from('teacher_class_assignments')
+      .insert({ teacher_id: teacherId, class_id: classId });
+    if (error) throw error;
+    return { ok: true, message: '✅ Guru berhasil ditambahkan ke kelas!' };
+  } catch (err: any) {
+    console.error('assignTeacherToClass failed:', err);
+    if (err?.code === '23505') {
+      return { ok: false, message: '⚠️ Guru sudah terdaftar di kelas ini.' };
+    }
+    return { ok: false, message: '⚠️ Gagal menambahkan guru.' };
+  }
+}
+
+export async function removeTeacherFromClass(
+  teacherId: string,
+  classId: string,
+): Promise<{ ok: boolean; message: string }> {
+  try {
+    const { error } = await supabase
+      .from('teacher_class_assignments')
+      .delete()
+      .eq('teacher_id', teacherId)
+      .eq('class_id', classId);
+    if (error) throw error;
+    return { ok: true, message: '✅ Guru berhasil dikeluarkan dari kelas.' };
+  } catch (err) {
+    console.error('removeTeacherFromClass failed:', err);
+    return { ok: false, message: '⚠️ Gagal mengeluarkan guru.' };
+  }
+}
+
 // ── Teacher Tugas Hooks ──────────────────────────────────────
 
 export function useTeacherTasks(classId: string | null) {

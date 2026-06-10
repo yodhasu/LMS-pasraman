@@ -1,7 +1,12 @@
 'use client';
 
 import { useAuth } from '@/lib/AuthContext';
-import { useAdminClasses, useStudentsByClass, createClass, updateClass, deleteClass, addStudentToClass, removeStudentFromClass, fetchUnassignedStudents } from '@/lib/supabase-data';
+import {
+  useAdminClasses, useStudentsByClass, useClassTeachers, useAvailableTeachers,
+  createClass, updateClass, deleteClass,
+  addStudentToClass, removeStudentFromClass, fetchUnassignedStudents,
+  assignTeacherToClass, removeTeacherFromClass,
+} from '@/lib/supabase-data';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, useCallback } from 'react';
 
@@ -12,6 +17,13 @@ export default function AdminKelasPage() {
   const [selectedClass, setSelectedClass] = useState<string | null>(null);
   const [studentRefreshKey, setStudentRefreshKey] = useState(0);
   const { students, loading: stdLoading } = useStudentsByClass(selectedClass, studentRefreshKey);
+
+  // Teacher management per class
+  const [showTeachers, setShowTeachers] = useState<string | null>(null);
+  const [showAddTeacher, setShowAddTeacher] = useState(false);
+  const [teacherRefreshKey, setTeacherRefreshKey] = useState(0);
+  const { teachers: classTeachers, loading: tchLoading } = useClassTeachers(showTeachers, teacherRefreshKey);
+  const { teachers: availableTeachers } = useAvailableTeachers();
 
   const [showCreate, setShowCreate] = useState(false);
   const [showEdit, setShowEdit] = useState<string | null>(null);
@@ -96,6 +108,11 @@ export default function AdminKelasPage() {
     setUnassigned([]);
   };
 
+  const openTeachers = (classId: string) => {
+    setShowTeachers(classId);
+    setShowAddTeacher(false);
+  };
+
   const handleAddStudent = async (userId: string, classId: string) => {
     const res = await addStudentToClass(userId, classId);
     showMsg(res.message);
@@ -106,6 +123,18 @@ export default function AdminKelasPage() {
     const res = await removeStudentFromClass(userId);
     showMsg(res.message);
     if (res.ok) setStudentRefreshKey(k => k + 1);
+  };
+
+  const handleAssignTeacher = async (teacherId: string, classId: string) => {
+    const res = await assignTeacherToClass(teacherId, classId);
+    showMsg(res.message);
+    if (res.ok) setTeacherRefreshKey(k => k + 1);
+  };
+
+  const handleRemoveTeacher = async (teacherId: string, classId: string) => {
+    const res = await removeTeacherFromClass(teacherId, classId);
+    showMsg(res.message);
+    if (res.ok) setTeacherRefreshKey(k => k + 1);
   };
 
   const loadUnassigned = useCallback(async () => {
@@ -125,6 +154,10 @@ export default function AdminKelasPage() {
     );
   }
 
+  // ── Helpers: check if teacher is already assigned ──
+  const isTeacherAssigned = (teacherId: string) =>
+    classTeachers.some(t => t.id === teacherId);
+
   return (
     <div className="space-y-5">
       {/* Message */}
@@ -138,7 +171,7 @@ export default function AdminKelasPage() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-bold">🏫 Kelola Kelas</h2>
-          <p className="text-sm text-[#5C7A6E] mt-0.5">Atur kelas dan daftar siswa</p>
+          <p className="text-sm text-[#5C7A6E] mt-0.5">Atur kelas, guru pengajar, dan daftar siswa</p>
         </div>
         <button
           onClick={openCreate}
@@ -156,41 +189,106 @@ export default function AdminKelasPage() {
       ) : classes.length === 0 ? (
         <div className="bg-white rounded-2xl border border-[#1F3D30]/5 p-8 text-center">
           <p className="text-lg">📭 Belum ada kelas</p>
-          <p className="text-sm text-[#5C7A6E] mt-2">Buat kelas baru untuk mulai mengelola siswa.</p>
+          <p className="text-sm text-[#5C7A6E] mt-2">Buat kelas baru untuk mulai mengelola guru dan siswa.</p>
         </div>
       ) : (
         <div className="grid gap-3">
           {classes.map(c => (
-            <div key={c.id} className="bg-white rounded-2xl border border-[#1F3D30]/5 p-5">
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-bold text-lg">{c.name}</h3>
-                  {c.semester && <p className="text-xs text-[#C8A84E] font-medium mt-0.5">{c.semester}</p>}
-                  {c.description && <p className="text-sm text-[#5C7A6E] mt-1 line-clamp-2">{c.description}</p>}
-                </div>
+            <ClassCard
+              key={c.id}
+              classData={c}
+              onEdit={openEdit}
+              onDelete={setShowDelete}
+              onStudents={openStudents}
+              onTeachers={openTeachers}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* ── Teacher Panel ── */}
+      {showTeachers && (
+        <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center p-4" onClick={() => { setShowTeachers(null); setShowAddTeacher(false); }}>
+          <div className="bg-white rounded-2xl w-full max-w-lg max-h-[80vh] overflow-y-auto shadow-xl" onClick={e => e.stopPropagation()}>
+            <div className="p-5 border-b border-[#1F3D30]/5 flex items-center justify-between sticky top-0 bg-white rounded-t-2xl z-10">
+              <h2 className="font-bold text-lg">👨‍🏫 Guru — {classes.find(c => c.id === showTeachers)?.name ?? 'Kelas'}</h2>
+              <div className="flex gap-2">
                 <button
-                  onClick={() => openStudents(c.id)}
-                  className="flex-shrink-0 px-3 py-1.5 bg-[#f0f4ec] text-[#1F3D30] rounded-lg text-xs font-semibold hover:bg-[#e0e8d8] transition-colors"
+                  onClick={() => setShowAddTeacher(true)}
+                  className="px-3 py-1.5 bg-[#1F3D30] text-white rounded-lg text-xs font-semibold hover:bg-[#2A4D3E] transition-colors"
                 >
-                  Lihat Siswa →
+                  + Tambah Guru
                 </button>
-              </div>
-              <div className="flex items-center gap-3 mt-3 pt-3 border-t border-[#1F3D30]/5">
-                <button
-                  onClick={() => openEdit(c)}
-                  className="text-xs text-[#5C7A6E] hover:text-[#1F3D30] underline underline-offset-2"
-                >
-                  Edit
-                </button>
-                <button
-                  onClick={() => setShowDelete(c.id)}
-                  className="text-xs text-red-500 hover:text-red-700 underline underline-offset-2"
-                >
-                  Hapus
-                </button>
+                <button onClick={() => { setShowTeachers(null); setShowAddTeacher(false); }}
+                  className="text-xl text-[#8A9E95] hover:text-[#1F3D30]">✕</button>
               </div>
             </div>
-          ))}
+
+            {showAddTeacher && (
+              <div className="p-4 border-b border-[#1F3D30]/5 bg-[#FBF8F4]">
+                <h3 className="text-sm font-semibold text-[#3a5e4a] mb-2">Tambah Guru ke Kelas</h3>
+                {availableTeachers.length === 0 ? (
+                  <p className="text-xs text-[#8A9E95]">Belum ada guru. Buat akun guru dulu dari <span className="font-semibold">Kelola User</span>.</p>
+                ) : (
+                  <div className="space-y-1 max-h-40 overflow-y-auto">
+                    {availableTeachers.filter(t => !isTeacherAssigned(t.id)).map(t => (
+                      <div key={t.id} className="flex items-center justify-between py-1.5 px-2 rounded-lg hover:bg-white transition-colors">
+                        <span className="text-sm">{t.displayName ?? t.username}</span>
+                        <button
+                          onClick={() => handleAssignTeacher(t.id, showTeachers)}
+                          className="text-xs text-[#1F3D30] font-semibold bg-white px-2.5 py-1 rounded-lg border border-[#d4dcd0] hover:bg-[#f0f4ec] transition-colors"
+                        >
+                          + Tambah
+                        </button>
+                      </div>
+                    ))}
+                    {availableTeachers.filter(t => !isTeacherAssigned(t.id)).length === 0 && (
+                      <p className="text-xs text-[#8A9E95]">Semua guru sudah terdaftar di kelas ini.</p>
+                    )}
+                  </div>
+                )}
+                <button onClick={() => setShowAddTeacher(false)}
+                  className="text-xs text-[#8A9E95] hover:text-[#1F3D30] mt-2 underline underline-offset-2">
+                  Tutup
+                </button>
+              </div>
+            )}
+
+            <div className="p-5">
+              {tchLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="w-6 h-6 border-2 border-[#e8efe4] border-t-[#1F3D30] rounded-full animate-spin" />
+                </div>
+              ) : classTeachers.length === 0 ? (
+                <div className="text-center py-8">
+                  <p className="text-sm text-[#8A9E95]">Belum ada guru di kelas ini.</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold text-[#8A9E95] uppercase tracking-wide">{classTeachers.length} Guru</p>
+                  {classTeachers.map(t => (
+                    <div key={t.id} className="flex items-center justify-between py-2 px-3 rounded-xl bg-[#FBF8F4]">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <span className="w-6 h-6 rounded-full bg-amber-700 text-white text-xs flex items-center justify-center flex-shrink-0">
+                          {(t.displayName ?? t.username)[0].toUpperCase()}
+                        </span>
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold truncate">{t.displayName ?? t.username}</p>
+                          <p className="text-[11px] text-[#8A9E95]">@{t.username}</p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleRemoveTeacher(t.id, showTeachers)}
+                        className="text-xs text-red-500 hover:text-red-700 underline underline-offset-2 flex-shrink-0 ml-2"
+                      >
+                        Keluarkan
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
 
@@ -371,6 +469,61 @@ export default function AdminKelasPage() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Class Card Component ──
+function ClassCard({
+  classData: c,
+  onEdit,
+  onDelete,
+  onStudents,
+  onTeachers,
+}: {
+  classData: { id: string; name: string; description: string; semester: string };
+  onEdit: (c: any) => void;
+  onDelete: (id: string) => void;
+  onStudents: (id: string) => void;
+  onTeachers: (id: string) => void;
+}) {
+  return (
+    <div className="bg-white rounded-2xl border border-[#1F3D30]/5 p-5">
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex-1 min-w-0">
+          <h3 className="font-bold text-lg">{c.name}</h3>
+          {c.semester && <p className="text-xs text-[#C8A84E] font-medium mt-0.5">{c.semester}</p>}
+          {c.description && <p className="text-sm text-[#5C7A6E] mt-1 line-clamp-2">{c.description}</p>}
+        </div>
+        <div className="flex gap-2 flex-shrink-0">
+          <button
+            onClick={() => onTeachers(c.id)}
+            className="px-3 py-1.5 bg-amber-50 text-amber-800 rounded-lg text-xs font-semibold hover:bg-amber-100 transition-colors"
+          >
+            👨‍🏫 Guru
+          </button>
+          <button
+            onClick={() => onStudents(c.id)}
+            className="px-3 py-1.5 bg-[#f0f4ec] text-[#1F3D30] rounded-lg text-xs font-semibold hover:bg-[#e0e8d8] transition-colors"
+          >
+            👥 Siswa
+          </button>
+        </div>
+      </div>
+      <div className="flex items-center gap-3 mt-3 pt-3 border-t border-[#1F3D30]/5">
+        <button
+          onClick={() => onEdit(c)}
+          className="text-xs text-[#5C7A6E] hover:text-[#1F3D30] underline underline-offset-2"
+        >
+          Edit
+        </button>
+        <button
+          onClick={() => onDelete(c.id)}
+          className="text-xs text-red-500 hover:text-red-700 underline underline-offset-2"
+        >
+          Hapus
+        </button>
+      </div>
     </div>
   );
 }
