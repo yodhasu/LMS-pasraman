@@ -8,7 +8,7 @@ const tabs: Array<{ href: string; label: string; icon: string; roles?: string[] 
   { href: '/materi', label: 'Materi', icon: '📚' },
   { href: '/tugas', label: 'Tugas', icon: '📝' },
   { href: '/nilai', label: 'Nilai', icon: '📊' },
-  { href: '/admin/users', label: 'Admin', icon: '👥', roles: ['admin'] },
+  { href: '/admin', label: 'Admin Panel', icon: '⚙️', roles: ['admin'] },
 ];
 
 export default function BottomNav() {

@@ -54,14 +54,14 @@ begin
   v_email := p_username || '@pasraman.id';
   v_user_id := gen_random_uuid();
 
-  -- Create Supabase Auth user
+  -- Create Supabase Auth user with explicit instance_id
   insert into auth.users (
-    id, aud, role, email, encrypted_password, email_confirmed_at,
+    id, instance_id, aud, role, email, encrypted_password, email_confirmed_at,
     raw_app_meta_data, raw_user_meta_data, created_at, updated_at,
     confirmation_token, email_change_token_new, email_change_token_current,
     recovery_token, reauthentication_token, is_sso_user, is_anonymous
   ) values (
-    v_user_id, 'authenticated', 'authenticated', v_email,
+    v_user_id, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', v_email,
     crypt(p_password, gen_salt('bf')), now(),
     jsonb_build_object('provider', 'email', 'providers', jsonb_build_array('email')),
     jsonb_build_object('display_name', p_display_name, 'username', p_username),
