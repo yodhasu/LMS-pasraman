@@ -15,9 +15,9 @@ function AuthGuard({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (loading) return;
 
-    // Logged in user on login page → go to dashboard
+    // Logged in user on login page → go to root (role-based redirect)
     if (user && pathname === '/login') {
-      router.replace('/dashboard');
+      router.replace('/');
       return;
     }
 
