@@ -175,6 +175,25 @@ export interface TeacherTaskItem {
   gradedCount: number;
 }
 
+// ── Admin User Management ──
+
+export interface AdminUserRow {
+  id: string;
+  username: string;
+  displayName: string | null;
+  role: 'student' | 'teacher' | 'admin';
+  classId: string | null;
+  className: string | null;
+  createdAt: string;
+}
+
+export interface CreateUserInput {
+  username: string;
+  displayName: string;
+  role: 'student' | 'teacher' | 'admin';
+  classId?: string | null;
+}
+
 export interface QuestionView {
   id: string;
   question: string;
