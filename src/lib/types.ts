@@ -136,3 +136,36 @@ export interface TaskInboxItem {
   status: 'pending' | 'submitted' | 'graded';
   score: number | null;
 }
+
+// ── Teacher Tugas Views ──
+
+export interface TeacherTaskItem {
+  id: string;
+  type: 'task' | 'pengayaan';
+  title: string;
+  description: string;
+  chapterId: string;
+  chapterTitle: string;
+  chapterEmoji: string;
+  totalStudents: number;
+  submittedCount: number;
+  gradedCount: number;
+}
+
+export interface QuestionView {
+  id: string;
+  question: string;
+  options: string[];
+  correctIndex: number;
+}
+
+export interface StudentSubmissionView {
+  studentId: string;
+  studentName: string;
+  username: string;
+  submitted: boolean;
+  answers?: Record<string, number>;
+  score?: number | null;
+  submittedAt?: string;
+  link?: string; // for pengayaan
+}

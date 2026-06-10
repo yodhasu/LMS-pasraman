@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
-import { Chapter, ChapterMaterial, ChapterProgressDetail, ClassEntry, MaterialProgressMap, ScoreRecord, StudentProgressMap, TaskInboxItem } from '@/lib/types';
+import { Chapter, ChapterMaterial, ChapterProgressDetail, ClassEntry, MaterialProgressMap, QuestionView, ScoreRecord, StudentProgressMap, StudentSubmissionView, TaskInboxItem, TeacherTaskItem } from '@/lib/types';
 import { CHAPTERS } from './mock-data';
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -1103,4 +1103,254 @@ export async function fetchUnassignedStudents(): Promise<Array<{ id: string; use
     console.error('fetchUnassignedStudents failed:', err);
     return [];
   }
+}
+
+// ── Teacher Tugas Hooks ──────────────────────────────────────
+
+export function useTeacherTasks(classId: string | null) {
+  const [tasks, setTasks] = useState<TeacherTaskItem[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!classId) { setTasks([]); setLoading(false); return; }
+    let cancelled = false;
+
+    async function load() {
+      setLoading(true);
+
+      // 1. Chapters for this class
+      const { data: chapters, error: chErr } = await supabase
+        .from('chapters')
+        .select('id, title, cover_emoji')
+        .eq('class_id', classId)
+        .order('order_index');
+
+      if (chErr || !chapters?.length) {
+        if (!cancelled) { setTasks([]); setLoading(false); }
+        return;
+      }
+
+      const chapterIds = chapters.map(c => c.id);
+
+      // 2. Students count
+      const { count: totalStudents } = await supabase
+        .from('app_users')
+        .select('*', { count: 'exact', head: true })
+        .eq('class_id', classId)
+        .eq('role', 'student');
+
+      const studentCount = totalStudents ?? 0;
+
+      // 3. chapter_tasks for those chapters
+      const { data: chapterTasks } = await supabase
+        .from('chapter_tasks')
+        .select('id, title, description, chapter_id')
+        .in('chapter_id', chapterIds)
+        .order('task_order');
+
+      // 4. pengayaan_prompts
+      const { data: pengayaanPrompts } = await supabase
+        .from('pengayaan_prompts')
+        .select('chapter_id, instruction')
+        .in('chapter_id', chapterIds);
+
+      // 5. Task submission counts
+      const taskIds = (chapterTasks ?? []).map(t => t.id);
+      let taskSubmissionCounts: Record<string, { total: number; graded: number }> = {};
+
+      if (taskIds.length > 0) {
+        const { data: submissions } = await supabase
+          .from('task_submissions')
+          .select('task_id, score')
+          .in('task_id', taskIds);
+
+        for (const s of submissions ?? []) {
+          if (!taskSubmissionCounts[s.task_id]) taskSubmissionCounts[s.task_id] = { total: 0, graded: 0 };
+          taskSubmissionCounts[s.task_id].total++;
+          if (s.score !== null) taskSubmissionCounts[s.task_id].graded++;
+        }
+      }
+
+      // 6. Pengayaan submission counts
+      let pengayaanCounts: Record<string, number> = {};
+      const penChapterIds = (pengayaanPrompts ?? []).map(p => p.chapter_id);
+      if (penChapterIds.length > 0) {
+        const { data: penSubs } = await supabase
+          .from('pengayaan_submissions')
+          .select('chapter_id')
+          .in('chapter_id', penChapterIds);
+
+        for (const s of penSubs ?? []) {
+          if (!pengayaanCounts[s.chapter_id]) pengayaanCounts[s.chapter_id] = 0;
+          pengayaanCounts[s.chapter_id]++;
+        }
+      }
+
+      // Build flat list
+      const chapterMap = new Map(chapters.map(c => [c.id, c]));
+      const result: TeacherTaskItem[] = [];
+
+      for (const task of chapterTasks ?? []) {
+        const ch = chapterMap.get(task.chapter_id);
+        result.push({
+          id: task.id,
+          type: 'task',
+          title: task.title,
+          description: task.description,
+          chapterId: task.chapter_id,
+          chapterTitle: ch?.title ?? '',
+          chapterEmoji: ch?.cover_emoji ?? '📖',
+          totalStudents: studentCount,
+          submittedCount: taskSubmissionCounts[task.id]?.total ?? 0,
+          gradedCount: taskSubmissionCounts[task.id]?.graded ?? 0,
+        });
+      }
+
+      for (const prompt of pengayaanPrompts ?? []) {
+        const ch = chapterMap.get(prompt.chapter_id);
+        result.push({
+          id: `pengayaan_${prompt.chapter_id}`,
+          type: 'pengayaan',
+          title: `Tugas Pengayaan: ${ch?.title ?? ''}`,
+          description: prompt.instruction,
+          chapterId: prompt.chapter_id,
+          chapterTitle: ch?.title ?? '',
+          chapterEmoji: ch?.cover_emoji ?? '📖',
+          totalStudents: studentCount,
+          submittedCount: pengayaanCounts[prompt.chapter_id] ?? 0,
+          gradedCount: 0, // pengayaan doesn't have auto-grading
+        });
+      }
+
+      if (!cancelled) {
+        setTasks(result);
+        setLoading(false);
+      }
+    }
+
+    load();
+    return () => { cancelled = true; };
+  }, [classId]);
+
+  return { tasks, loading };
+}
+
+export function useTaskGradingDetail(
+  identifier: string,          // taskId or "pengayaan_<chapterId>"
+  classId: string,
+) {
+  const [questions, setQuestions] = useState<QuestionView[]>([]);
+  const [submissions, setSubmissions] = useState<StudentSubmissionView[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+
+  useEffect(() => {
+    if (!classId) { setLoading(false); return; }
+    let cancelled = false;
+
+    async function load() {
+      setLoading(true);
+      const isPengayaan = identifier.startsWith('pengayaan_');
+
+      // Get all students in class
+      const { data: students } = await supabase
+        .from('app_users')
+        .select('id, username, display_name')
+        .eq('class_id', classId)
+        .eq('role', 'student')
+        .order('username');
+
+      const studentMap = new Map((students ?? []).map(s => [s.id, s]));
+
+      if (isPengayaan) {
+        const chapterId = identifier.replace('pengayaan_', '');
+
+        const { data: chapter } = await supabase
+          .from('chapters')
+          .select('title')
+          .eq('id', chapterId)
+          .single();
+
+        const { data: prompt } = await supabase
+          .from('pengayaan_prompts')
+          .select('instruction')
+          .eq('chapter_id', chapterId)
+          .single();
+
+        const { data: penSubs } = await supabase
+          .from('pengayaan_submissions')
+          .select('user_id, link, submitted_at')
+          .eq('chapter_id', chapterId);
+
+        const subMap = new Map((penSubs ?? []).map(s => [s.user_id, s]));
+
+        const viewList: StudentSubmissionView[] = (students ?? []).map(s => {
+          const sub = subMap.get(s.id);
+          return {
+            studentId: s.id,
+            studentName: s.display_name ?? s.username,
+            username: s.username,
+            submitted: !!sub,
+            link: sub?.link,
+            submittedAt: sub?.submitted_at,
+          };
+        });
+
+        if (!cancelled) {
+          setTitle(`Tugas Pengayaan: ${chapter?.title ?? ''}`);
+          setDescription(prompt?.instruction ?? '');
+          setQuestions([]);
+          setSubmissions(viewList);
+          setLoading(false);
+        }
+        return;
+      }
+
+      // Regular task
+      const [taskRes, questionsRes, subsRes] = await Promise.all([
+        supabase.from('chapter_tasks').select('title, description, chapter_id').eq('id', identifier).single(),
+        supabase.from('mcq_questions').select('id, question, options, correct_index')
+          .eq('task_id', identifier).eq('assessment', 'tugas').order('question_order'),
+        supabase.from('task_submissions').select('user_id, answers, score, submitted_at').eq('task_id', identifier),
+      ]);
+
+      if (cancelled) return;
+
+      const mappedQuestions: QuestionView[] = (questionsRes.data ?? []).map(q => ({
+        id: q.id,
+        question: q.question,
+        options: typeof q.options === 'object' && Array.isArray(q.options) ? q.options as string[] : [],
+        correctIndex: q.correct_index,
+      }));
+
+      const subMap = new Map((subsRes.data ?? []).map(s => [s.user_id, s]));
+
+      const viewList: StudentSubmissionView[] = (students ?? []).map(s => {
+        const sub = subMap.get(s.id);
+        return {
+          studentId: s.id,
+          studentName: s.display_name ?? s.username,
+          username: s.username,
+          submitted: !!sub,
+          answers: sub?.answers as Record<string, number> | undefined,
+          score: sub?.score,
+          submittedAt: sub?.submitted_at,
+        };
+      });
+
+      if (!cancelled) {
+        setTitle(taskRes.data?.title ?? '');
+        setDescription(taskRes.data?.description ?? '');
+        setQuestions(mappedQuestions);
+        setSubmissions(viewList);
+        setLoading(false);
+      }
+    }
+
+    load();
+    return () => { cancelled = true; };
+  }, [identifier, classId]);
+
+  return { title, description, questions, submissions, loading };
 }
