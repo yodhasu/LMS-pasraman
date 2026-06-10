@@ -3,7 +3,8 @@
 import { useTaskGradingDetail } from '@/lib/supabase-data';
 import { useAuth } from '@/lib/AuthContext';
 import Link from 'next/link';
-import { use, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { use, useState, useEffect } from 'react';
 
 export default function TaskDetailPage({
   params,
@@ -15,8 +16,15 @@ export default function TaskDetailPage({
   const { taskId } = use(params);
   const { class: classId } = use(searchParams);
   const { role } = useAuth();
+  const router = useRouter();
 
   const isTeacher = role === 'teacher' || role === 'admin';
+
+  useEffect(() => {
+    if (isTeacher && !classId && role !== null) {
+      router.push('/tugas');
+    }
+  }, [classId, isTeacher, role, router]);
 
   if (!isTeacher) {
     return (
@@ -29,9 +37,8 @@ export default function TaskDetailPage({
 
   if (!classId) {
     return (
-      <div className="max-w-3xl mx-auto text-center py-12">
-        <p className="text-lg">❌ Kelas tidak dipilih</p>
-        <Link href="/tugas" className="text-sm text-[#1F3D30] hover:underline mt-2 inline-block">Kembali ke daftar tugas →</Link>
+      <div className="max-w-3xl mx-auto flex items-center justify-center min-h-[300px]">
+        <div className="w-8 h-8 border-2 border-[#e8efe4] border-t-[#1F3D30] rounded-full animate-spin" />
       </div>
     );
   }
@@ -40,7 +47,7 @@ export default function TaskDetailPage({
 }
 
 function TaskDetailContent({ taskId, classId }: { taskId: string; classId: string }) {
-  const { title, description, questions, submissions, loading } = useTaskGradingDetail(taskId, classId);
+  const { title, description, questions, submissions, loading, error } = useTaskGradingDetail(taskId, classId);
   const [expandedStudent, setExpandedStudent] = useState<string | null>(null);
   const isPengayaan = taskId.startsWith('pengayaan_');
 
@@ -50,6 +57,20 @@ function TaskDetailContent({ taskId, classId }: { taskId: string; classId: strin
     return (
       <div className="max-w-3xl mx-auto flex items-center justify-center min-h-[300px]">
         <div className="w-8 h-8 border-2 border-[#e8efe4] border-t-[#1F3D30] rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="max-w-3xl mx-auto space-y-5">
+        <Link href="/tugas" className="text-sm text-[#5C7A6E] hover:text-[#1F3D30] transition-colors inline-flex items-center gap-1">
+          ← Kembali
+        </Link>
+        <div className="bg-red-50 text-red-700 text-sm px-4 py-6 rounded-2xl text-center">
+          <span className="text-2xl block mb-2">⚠️</span>
+          {error}
+        </div>
       </div>
     );
   }
@@ -87,7 +108,7 @@ function TaskDetailContent({ taskId, classId }: { taskId: string; classId: strin
                   ${student.submitted ? 'hover:bg-[#FBF8F4] cursor-pointer' : 'cursor-default opacity-70'}`}
               >
                 <div className="w-10 h-10 rounded-xl bg-[#1F3D30] text-white flex items-center justify-center text-sm font-bold flex-shrink-0">
-                  {student.studentName[0].toUpperCase()}
+                  {student.studentName?.[0]?.toUpperCase() ?? '?'}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold truncate">{student.studentName}</p>
@@ -157,7 +178,7 @@ function TaskDetailContent({ taskId, classId }: { taskId: string; classId: strin
                     ${student.submitted ? 'hover:bg-[#FBF8F4] cursor-pointer' : 'cursor-default opacity-70'}`}
                 >
                   <div className="w-10 h-10 rounded-xl bg-[#1F3D30] text-white flex items-center justify-center text-sm font-bold flex-shrink-0">
-                    {student.studentName[0].toUpperCase()}
+                    {student.studentName?.[0]?.toUpperCase() ?? '?'}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold truncate">{student.studentName}</p>

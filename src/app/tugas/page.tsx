@@ -22,7 +22,7 @@ export default function TugasPage() {
 function TeacherTugasView() {
   const { classes } = useTeacherClasses();
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
-  const { tasks, loading } = useTeacherTasks(selectedClassId);
+  const { tasks, loading, error } = useTeacherTasks(selectedClassId);
 
   const submittedTotal = tasks.reduce((s, t) => s + t.submittedCount, 0);
   const studentCount = tasks.length > 0 ? tasks[0].totalStudents : 0;
@@ -56,6 +56,11 @@ function TeacherTugasView() {
       ) : loading ? (
         <div className="flex items-center justify-center py-8">
           <div className="w-8 h-8 border-2 border-[#e8efe4] border-t-[#1F3D30] rounded-full animate-spin" />
+        </div>
+      ) : error ? (
+        <div className="bg-red-50 text-red-700 text-sm px-4 py-6 rounded-2xl text-center">
+          <span className="text-2xl block mb-2">⚠️</span>
+          {error}
         </div>
       ) : tasks.length === 0 ? (
         <div className="bg-white rounded-2xl border border-[#1F3D30]/5 p-8 text-center">
