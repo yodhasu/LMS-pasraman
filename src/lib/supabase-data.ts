@@ -1554,26 +1554,14 @@ export async function adminCreateUser(
   input: CreateUserInput,
 ): Promise<{ ok: boolean; userId?: string; password?: string; message: string }> {
   try {
-    const password = `pasraman-${input.username}`;
-    const { data, error } = await supabase.rpc('create_app_user', {
-      p_username: input.username,
-      p_password: password,
-      p_display_name: input.displayName,
-      p_role: input.role,
+    const res = await fetch('/api/admin/create-user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
     });
-    if (error) throw error;
-
-    // If classId provided, update after creation
-    if (input.classId && data) {
-      await supabase.rpc('admin_update_user', {
-        p_user_id: data,
-        p_display_name: null,
-        p_role: null,
-        p_class_id: input.classId,
-      });
-    }
-
-    return { ok: true, userId: data, password, message: `✅ Akun ${input.username} berhasil dibuat!` };
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.message);
+    return data;
   } catch (err: any) {
     console.error('adminCreateUser error:', err);
     return { ok: false, message: `⚠️ Gagal membuat user: ${err.message ?? 'unknown error'}` };
