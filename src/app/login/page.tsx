@@ -21,7 +21,7 @@ export default function LoginPage() {
     setError('');
     try {
       await signIn(username, password);
-      router.push('/dashboard');
+      router.push('/');
     } catch {
       setError('Username atau password salah');
     } finally {

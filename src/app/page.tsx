@@ -10,8 +10,10 @@ export default function Home() {
 
   useEffect(() => {
     if (loading) return;
-    if (!user) router.replace('/login');
-    else if (role === 'admin') router.replace('/admin');
+    if (!user) { router.replace('/login'); return; }
+    // role is null while ensureAppUser is still fetching — wait for it
+    if (role === null) return;
+    if (role === 'admin') router.replace('/admin');
     else router.replace('/dashboard');
   }, [user, role, loading, router]);
 
