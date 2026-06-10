@@ -564,6 +564,10 @@ export async function submitTaskAnswer(
       .upsert({ task_id: taskId, user_id: userId, user_name: userName, answers, score, submitted_at: new Date().toISOString() }, { onConflict: 'task_id,user_id' });
 
     if (error) throw error;
+
+    // Also sync to scores table so teacher /nilai view sees it
+    await saveScore(userId, chapterId, 'tugas', score);
+
     return true;
   } catch (err) {
     console.error('submitTaskAnswer supabase failed:', err);
