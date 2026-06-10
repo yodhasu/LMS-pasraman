@@ -1,9 +1,9 @@
--- Fix: save_chapter_batch and delete_chapter accept text (not uuid)
--- because chapters.id is TEXT (not UUID) in the live database
--- Also drops old uuid overloads that would conflict
+-- Fix: save_chapter_batch and delete_chapter accept uuid (not text)
+-- because chapters.id IS uuid in the live database
+-- Also drops old text overloads that were incorrectly applied
 
 create or replace function public.save_chapter_batch(
-  p_chapter_id text,
+  p_chapter_id uuid,
   p_metadata jsonb,
   p_pengayaan jsonb,
   p_materials jsonb,
@@ -154,11 +154,11 @@ begin
 end;
 $$;
 
-revoke execute on function public.save_chapter_batch(text, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb) from public;
-grant execute on function public.save_chapter_batch(text, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb) to authenticated;
+revoke execute on function public.save_chapter_batch(uuid, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb) from public;
+grant execute on function public.save_chapter_batch(uuid, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb) to authenticated;
 
 create or replace function public.delete_chapter(
-  p_chapter_id text
+  p_chapter_id uuid
 )
 returns jsonb
 language plpgsql
@@ -186,9 +186,9 @@ begin
 end;
 $$;
 
-revoke execute on function public.delete_chapter(text) from public;
-grant execute on function public.delete_chapter(text) to authenticated;
+revoke execute on function public.delete_chapter(uuid) from public;
+grant execute on function public.delete_chapter(uuid) to authenticated;
 
--- Clean up old uuid overloads (if they exist)
-drop function if exists public.save_chapter_batch(uuid, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb);
-drop function if exists public.delete_chapter(uuid);
+-- Drop incorrect text overloads that were applied earlier
+drop function if exists public.save_chapter_batch(text, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb);
+drop function if exists public.delete_chapter(text);
