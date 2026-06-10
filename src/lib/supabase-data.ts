@@ -1110,13 +1110,15 @@ export async function fetchUnassignedStudents(): Promise<Array<{ id: string; use
 export function useTeacherTasks(classId: string | null) {
   const [tasks, setTasks] = useState<TeacherTaskItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!classId) { setTasks([]); setLoading(false); return; }
+    if (!classId) { setTasks([]); setLoading(false); setError(null); return; }
     let cancelled = false;
 
     async function load() {
       setLoading(true);
+      setError(null);
 
       // 1. Chapters for this class
       const { data: chapters, error: chErr } = await supabase
@@ -1125,7 +1127,13 @@ export function useTeacherTasks(classId: string | null) {
         .eq('class_id', classId)
         .order('order_index');
 
-      if (chErr || !chapters?.length) {
+      if (chErr) {
+        console.error('useTeacherTasks: chapters fetch failed', chErr);
+        if (!cancelled) { setError('Gagal memuat data bab. Silakan coba lagi.'); setTasks([]); setLoading(false); }
+        return;
+      }
+
+      if (!chapters?.length) {
         if (!cancelled) { setTasks([]); setLoading(false); }
         return;
       }
@@ -1232,7 +1240,7 @@ export function useTeacherTasks(classId: string | null) {
     return () => { cancelled = true; };
   }, [classId]);
 
-  return { tasks, loading };
+  return { tasks, loading, error };
 }
 
 export function useTaskGradingDetail(
@@ -1242,6 +1250,7 @@ export function useTaskGradingDetail(
   const [questions, setQuestions] = useState<QuestionView[]>([]);
   const [submissions, setSubmissions] = useState<StudentSubmissionView[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
 
@@ -1251,39 +1260,96 @@ export function useTaskGradingDetail(
 
     async function load() {
       setLoading(true);
-      const isPengayaan = identifier.startsWith('pengayaan_');
+      setError(null);
 
-      // Get all students in class
-      const { data: students } = await supabase
-        .from('app_users')
-        .select('id, username, display_name')
-        .eq('class_id', classId)
-        .eq('role', 'student')
-        .order('username');
+      try {
+        const isPengayaan = identifier.startsWith('pengayaan_');
 
-      const studentMap = new Map((students ?? []).map(s => [s.id, s]));
+        // Get all students in class
+        const { data: students, error: stuErr } = await supabase
+          .from('app_users')
+          .select('id, username, display_name')
+          .eq('class_id', classId)
+          .eq('role', 'student')
+          .order('username');
 
-      if (isPengayaan) {
-        const chapterId = identifier.replace('pengayaan_', '');
+        if (stuErr) {
+          console.error('useTaskGradingDetail: students fetch failed', stuErr);
+          if (!cancelled) { setError('Gagal memuat data siswa.'); setLoading(false); }
+          return;
+        }
 
-        const { data: chapter } = await supabase
-          .from('chapters')
-          .select('title')
-          .eq('id', chapterId)
-          .single();
+        if (isPengayaan) {
+          const chapterId = identifier.replace('pengayaan_', '');
 
-        const { data: prompt } = await supabase
-          .from('pengayaan_prompts')
-          .select('instruction')
-          .eq('chapter_id', chapterId)
-          .single();
+          const { data: chapter, error: chErr } = await supabase
+            .from('chapters')
+            .select('title')
+            .eq('id', chapterId)
+            .maybeSingle();
 
-        const { data: penSubs } = await supabase
-          .from('pengayaan_submissions')
-          .select('user_id, link, submitted_at')
-          .eq('chapter_id', chapterId);
+          const { data: prompt, error: prErr } = await supabase
+            .from('pengayaan_prompts')
+            .select('instruction')
+            .eq('chapter_id', chapterId)
+            .maybeSingle();
 
-        const subMap = new Map((penSubs ?? []).map(s => [s.user_id, s]));
+          if (chErr) console.error('useTaskGradingDetail: chapter fetch failed', chErr);
+          if (prErr) console.error('useTaskGradingDetail: prompt fetch failed', prErr);
+
+          const { data: penSubs } = await supabase
+            .from('pengayaan_submissions')
+            .select('user_id, link, submitted_at')
+            .eq('chapter_id', chapterId);
+
+          const subMap = new Map((penSubs ?? []).map(s => [s.user_id, s]));
+
+          const viewList: StudentSubmissionView[] = (students ?? []).map(s => {
+            const sub = subMap.get(s.id);
+            return {
+              studentId: s.id,
+              studentName: s.display_name ?? s.username,
+              username: s.username,
+              submitted: !!sub,
+              link: sub?.link,
+              submittedAt: sub?.submitted_at,
+            };
+          });
+
+          if (!cancelled) {
+            setTitle(`Tugas Pengayaan: ${chapter?.title ?? ''}`);
+            setDescription(prompt?.instruction ?? '');
+            setQuestions([]);
+            setSubmissions(viewList);
+            setLoading(false);
+          }
+          return;
+        }
+
+        // Regular task
+        const [taskRes, questionsRes, subsRes] = await Promise.all([
+          supabase.from('chapter_tasks').select('title, description, chapter_id').eq('id', identifier).maybeSingle(),
+          supabase.from('mcq_questions').select('id, question, options, correct_index')
+            .eq('task_id', identifier).eq('assessment', 'tugas').order('question_order'),
+          supabase.from('task_submissions').select('user_id, answers, score, submitted_at').eq('task_id', identifier),
+        ]);
+
+        if (cancelled) return;
+
+        if (taskRes.error) {
+          console.error('useTaskGradingDetail: task fetch failed', taskRes.error);
+          if (!cancelled) { setError('Tugas tidak ditemukan.'); setLoading(false); }
+          return;
+        }
+
+        const mappedQuestions: QuestionView[] = (questionsRes.data ?? []).map(q => ({
+          id: q.id,
+          question: q.question,
+          options: Array.isArray(q.options) ? q.options.map(o => String(o)) : [],
+          correctIndex: q.correct_index,
+        }));
+
+        const subMap = new Map((subsRes.data ?? []).map(s => [s.user_id, s]));
 
         const viewList: StudentSubmissionView[] = (students ?? []).map(s => {
           const sub = subMap.get(s.id);
@@ -1292,59 +1358,22 @@ export function useTaskGradingDetail(
             studentName: s.display_name ?? s.username,
             username: s.username,
             submitted: !!sub,
-            link: sub?.link,
+            answers: sub?.answers as Record<string, number> | undefined,
+            score: sub?.score,
             submittedAt: sub?.submitted_at,
           };
         });
 
         if (!cancelled) {
-          setTitle(`Tugas Pengayaan: ${chapter?.title ?? ''}`);
-          setDescription(prompt?.instruction ?? '');
-          setQuestions([]);
+          setTitle(taskRes.data?.title ?? '');
+          setDescription(taskRes.data?.description ?? '');
+          setQuestions(mappedQuestions);
           setSubmissions(viewList);
           setLoading(false);
         }
-        return;
-      }
-
-      // Regular task
-      const [taskRes, questionsRes, subsRes] = await Promise.all([
-        supabase.from('chapter_tasks').select('title, description, chapter_id').eq('id', identifier).single(),
-        supabase.from('mcq_questions').select('id, question, options, correct_index')
-          .eq('task_id', identifier).eq('assessment', 'tugas').order('question_order'),
-        supabase.from('task_submissions').select('user_id, answers, score, submitted_at').eq('task_id', identifier),
-      ]);
-
-      if (cancelled) return;
-
-      const mappedQuestions: QuestionView[] = (questionsRes.data ?? []).map(q => ({
-        id: q.id,
-        question: q.question,
-        options: typeof q.options === 'object' && Array.isArray(q.options) ? q.options as string[] : [],
-        correctIndex: q.correct_index,
-      }));
-
-      const subMap = new Map((subsRes.data ?? []).map(s => [s.user_id, s]));
-
-      const viewList: StudentSubmissionView[] = (students ?? []).map(s => {
-        const sub = subMap.get(s.id);
-        return {
-          studentId: s.id,
-          studentName: s.display_name ?? s.username,
-          username: s.username,
-          submitted: !!sub,
-          answers: sub?.answers as Record<string, number> | undefined,
-          score: sub?.score,
-          submittedAt: sub?.submitted_at,
-        };
-      });
-
-      if (!cancelled) {
-        setTitle(taskRes.data?.title ?? '');
-        setDescription(taskRes.data?.description ?? '');
-        setQuestions(mappedQuestions);
-        setSubmissions(viewList);
-        setLoading(false);
+      } catch (err) {
+        console.error('useTaskGradingDetail: unexpected error', err);
+        if (!cancelled) { setError('Terjadi kesalahan. Silakan coba lagi.'); setLoading(false); }
       }
     }
 
@@ -1352,5 +1381,5 @@ export function useTaskGradingDetail(
     return () => { cancelled = true; };
   }, [identifier, classId]);
 
-  return { title, description, questions, submissions, loading };
+  return { title, description, questions, submissions, loading, error };
 }
