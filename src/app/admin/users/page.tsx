@@ -2,7 +2,7 @@
 
 import { useAuth } from '@/lib/AuthContext';
 import {
-  useAllUsers, useAllClasses, adminCreateUser, adminUpdateUser,
+  useAllUsers, adminCreateUser, adminUpdateUser,
   adminDeleteUser, adminResetPassword,
 } from '@/lib/supabase-data';
 import { useState, useMemo } from 'react';
@@ -36,17 +36,15 @@ function Modal({ open, onClose, title, children }: {
 }
 
 // ── Create / Edit User Form ──
-function UserForm({ mode, initial, classes, onSave, onClose }: {
+function UserForm({ mode, initial, onSave, onClose }: {
   mode: 'create' | 'edit';
-  initial?: { id: string; username: string; displayName: string; role: string; classId: string | null };
-  classes: Array<{ id: string; name: string }>;
+  initial?: { id: string; username: string; displayName: string; role: string };
   onSave: (data: any) => Promise<void>;
   onClose: () => void;
 }) {
   const [username, setUsername] = useState(initial?.username ?? '');
   const [displayName, setDisplayName] = useState(initial?.displayName ?? '');
   const [role, setRole] = useState<string>(initial?.role ?? 'student');
-  const [classId, setClassId] = useState<string>(initial?.classId ?? '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -60,9 +58,6 @@ function UserForm({ mode, initial, classes, onSave, onClose }: {
       username: username.trim(),
       displayName: displayName.trim(),
       role,
-      classId: role === 'student'
-        ? (classId || '00000000-0000-0000-0000-000000000000')
-        : null,
     });
     setSaving(false);
   };
@@ -114,22 +109,6 @@ function UserForm({ mode, initial, classes, onSave, onClose }: {
         </div>
       </div>
 
-      {role === 'student' && (
-        <div>
-          <label className="block text-sm font-semibold text-[#1F3D30] mb-1">Kelas</label>
-          <select
-            value={classId}
-            onChange={e => setClassId(e.target.value)}
-            className="w-full px-4 py-3 rounded-xl border border-[#D4CFC7] text-sm focus:outline-none focus:ring-2 focus:ring-[#1F3D30]/20 bg-white"
-          >
-            <option value="">— Tanpa Kelas —</option>
-            {classes.map(c => (
-              <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
-          </select>
-        </div>
-      )}
-
       <div className="flex gap-3 pt-2">
         <button
           type="button"
@@ -154,7 +133,6 @@ function UserForm({ mode, initial, classes, onSave, onClose }: {
 export default function AdminUsersPage() {
   const { role } = useAuth();
   const { users, loading, error, refresh } = useAllUsers();
-  const { classes } = useAllClasses();
 
   // Modal state
   const [showCreate, setShowCreate] = useState(false);
@@ -198,7 +176,6 @@ export default function AdminUsersPage() {
       username: data.username,
       displayName: data.displayName,
       role: data.role,
-      classId: data.classId,
     });
     if (result.ok) {
       setShowCreate(false);
@@ -214,7 +191,6 @@ export default function AdminUsersPage() {
     const result = await adminUpdateUser(data.id, {
       displayName: data.displayName,
       role: data.role,
-      classId: data.classId,
     });
     if (result.ok) {
       setEditUser(null);
@@ -345,7 +321,6 @@ export default function AdminUsersPage() {
                   <th className="text-left px-4 py-3 font-semibold text-[#5C7A6E]">Username</th>
                   <th className="text-left px-4 py-3 font-semibold text-[#5C7A6E]">Nama</th>
                   <th className="text-left px-4 py-3 font-semibold text-[#5C7A6E]">Role</th>
-                  <th className="text-left px-4 py-3 font-semibold text-[#5C7A6E]">Kelas</th>
                   <th className="text-right px-4 py-3 font-semibold text-[#5C7A6E]">Aksi</th>
                 </tr>
               </thead>
@@ -360,7 +335,6 @@ export default function AdminUsersPage() {
                         {ROLE_BADGES[u.role].label}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-[#5C7A6E]">{u.className || '—'}</td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-1">
                         <button
@@ -399,15 +373,12 @@ export default function AdminUsersPage() {
                     {ROLE_BADGES[u.role].label}
                   </span>
                 </div>
-                <div className="flex items-center justify-between">
-                  <p className="text-xs text-[#5C7A6E]">Kelas: {u.className || '—'}</p>
-                  <div className="flex gap-1">
+                <div className="flex items-center justify-end gap-1">
                     <button onClick={() => setEditUser(u)} className="p-1.5 rounded-lg hover:bg-[#F0EAE2] text-sm">✏️</button>
                     <button onClick={() => setResetTarget(u)} className="p-1.5 rounded-lg hover:bg-[#F0EAE2] text-sm">🔄</button>
                     <button onClick={() => setDeleteUser(u)} className="p-1.5 rounded-lg hover:bg-red-50 text-sm">🗑️</button>
                   </div>
                 </div>
-              </div>
             ))}
           </div>
 
@@ -458,7 +429,7 @@ export default function AdminUsersPage() {
 
       {/* Create modal */}
       <Modal open={showCreate} onClose={() => setShowCreate(false)} title="➕ Tambah User Baru">
-        <UserForm mode="create" classes={classes} onSave={handleCreate} onClose={() => setShowCreate(false)} />
+        <UserForm mode="create" onSave={handleCreate} onClose={() => setShowCreate(false)} />
       </Modal>
 
       {/* Edit modal */}
@@ -471,9 +442,7 @@ export default function AdminUsersPage() {
               username: editUser.username,
               displayName: editUser.displayName ?? '',
               role: editUser.role,
-              classId: editUser.classId,
             }}
-            classes={classes}
             onSave={handleEdit}
             onClose={() => setEditUser(null)}
           />
