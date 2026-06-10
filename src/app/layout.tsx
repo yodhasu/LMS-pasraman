@@ -5,6 +5,10 @@ import ClientLayout from './ClientLayout';
 export const metadata: Metadata = {
   title: 'Pasraman Wira Satya Bhuana',
   description: 'LMS Pendidikan Agama Hindu — Pasraman Wira Satya Bhuana',
+  icons: {
+    icon: '/favicon.png',
+    apple: '/favicon.png',
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
