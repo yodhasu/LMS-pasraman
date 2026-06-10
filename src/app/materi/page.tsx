@@ -47,7 +47,7 @@ export default function MateriPage() {
           <h1 className="text-xl lg:text-2xl font-bold">📚 Materi</h1>
           <p className="text-sm text-[#5C7A6E] mt-0.5">Susila & Etika Hindu — {chapters.length} Bab</p>
         </div>
-        {isTeacher && (
+        {isTeacher && selectedClassId && (
           <button
             onClick={handleCreateBab}
             disabled={creating}
