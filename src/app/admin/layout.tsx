@@ -10,6 +10,12 @@ const adminTabs = [
   { href: '/admin/kelas', label: 'Kelola Kelas', icon: '🏫' },
 ];
 
+const isDebug = process.env.NEXT_PUBLIC_IS_DEBUG === 'true';
+
+if (isDebug) {
+  adminTabs.push({ href: '/admin/debug', label: 'Debug', icon: '🔧' });
+}
+
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const { user, role, loading } = useAuth();
   const router = useRouter();

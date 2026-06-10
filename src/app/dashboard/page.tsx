@@ -4,7 +4,7 @@ import { useAuth } from '@/lib/AuthContext';
 import {
   useChapters, useStudentProgress, useNilai, useTeacherClasses,
   useClassProgress, useTeacherTasks,
-  computeTaskInbox, resetUserProgress, resetPrototypeData,
+  computeTaskInbox, resetUserProgress,
 } from '@/lib/supabase-data';
 import Link from 'next/link';
 import { useState } from 'react';
@@ -87,9 +87,7 @@ export default function DashboardPage() {
     setConfirmReset(false);
     setResetting(true);
     setResetMsg(null);
-    const result = isTeacher
-      ? await resetPrototypeData()
-      : await resetUserProgress(user.uid);
+    const result = await resetUserProgress(user.uid);
     setResetMsg(result.message);
     setResetting(false);
     if (result.ok) {
