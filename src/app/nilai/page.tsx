@@ -245,29 +245,40 @@ function StudentScoreCard({
     ? Math.round(allScoreValues.reduce((a, b) => a + b, 0) / allScoreValues.length)
     : null;
 
+  const kkm = 70;
+  const isBelowKkm = avgScore !== null && avgScore < kkm;
+
   return (
     <div className="bg-white rounded-2xl border border-[#1F3D30]/5 overflow-hidden">
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full p-4 flex items-center gap-4 text-left hover:bg-[#FBF8F4] transition-colors"
+        className="w-full p-5 flex items-center gap-4 text-left hover:bg-[#FBF8F4] transition-colors"
       >
-        <div className="w-10 h-10 rounded-xl bg-[#1F3D30] text-white flex items-center justify-center text-sm font-bold flex-shrink-0">
+        <div className="w-12 h-12 rounded-xl bg-[#1F3D30] text-white flex items-center justify-center text-lg font-bold flex-shrink-0">
           {(student.displayName ?? student.username)[0].toUpperCase()}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="font-semibold truncate">{student.displayName ?? student.username}</p>
-          <p className="text-xs text-[#8A9E95]">@{student.username} · {scoreCount} nilai</p>
+          <p className="text-[17px] font-semibold truncate">{student.displayName ?? student.username}</p>
+          <p className="text-sm text-[#8A9E95]">@{student.username} · {scoreCount} nilai</p>
         </div>
         <div className="text-right flex-shrink-0">
           {avgScore !== null && (
-            <p className="text-lg font-bold text-[#1F3D30]">{avgScore}</p>
+            <div className="flex flex-col items-end">
+              <span className="text-[11px] text-[#8A9E95] font-medium">Rata-rata</span>
+              <span className={`text-xl font-bold ${isBelowKkm ? 'text-red-500' : 'text-[#1F3D30]'}`}>
+                {avgScore}
+              </span>
+              {isBelowKkm && (
+                <span className="text-[11px] text-red-500 font-semibold mt-0.5">⬇ Di bawah KKM</span>
+              )}
+            </div>
           )}
         </div>
-        <span className="text-sm text-[#8A9E95]">{expanded ? '▲' : '▼'}</span>
+        <span className="text-base text-[#8A9E95]">{expanded ? '▲' : '▼'}</span>
       </button>
 
       {expanded && (
-        <div className="px-4 pb-4 space-y-1">
+        <div className="px-5 pb-5 space-y-2">
           {chapters.map((chapter: any, i: number) => {
             const cs = chapterScores[chapter.id];
             if (!cs || (cs.pretest === undefined && cs.posttest === undefined && cs.tugas === undefined && cs.pengayaan === undefined)) {
@@ -275,26 +286,39 @@ function StudentScoreCard({
             }
 
             return (
-              <div key={chapter.id} className="flex items-center gap-3 py-2 px-3 rounded-xl bg-[#FBF8F4] text-sm">
-                <span className="text-xs font-semibold text-[#8A9E95] uppercase w-14">Bab {i + 1}</span>
-                <span className="flex-1 truncate text-[#1F3D30] font-medium">{chapter.title}</span>
-                <span className="text-xs px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 font-medium">
-                  {cs.pretest !== undefined ? `Pre: ${cs.pretest}` : '—'}
-                </span>
-                <span className="text-xs px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 font-medium">
-                  {cs.tugas !== undefined ? `Tgs: ${cs.tugas}` : '—'}
-                </span>
-                <span className="text-xs px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 font-medium">
-                  {cs.posttest !== undefined ? `Post: ${cs.posttest}` : '—'}
-                </span>
-                <span className="text-xs px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 font-medium">
-                  {cs.pengayaan !== undefined ? `Peng: ${cs.pengayaan}` : '—'}
-                </span>
+              <div key={chapter.id} className="flex items-center gap-4 py-3 px-4 rounded-xl bg-[#FBF8F4]">
+                <div className="flex-shrink-0 w-16">
+                  <span className="text-[11px] font-bold text-[#8A9E95] uppercase block leading-tight">Bab</span>
+                  <span className="text-sm font-bold text-[#1F3D30]">{i + 1}</span>
+                </div>
+                <span className="flex-1 truncate text-sm font-semibold text-[#1F3D30]">{chapter.title}</span>
+                <div className="flex items-center gap-2">
+                  {cs.pretest !== undefined && (
+                    <span className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-lg bg-amber-50 text-amber-700">
+                      🧪{cs.pretest}
+                    </span>
+                  )}
+                  {cs.tugas !== undefined && (
+                    <span className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700">
+                      📝{cs.tugas}
+                    </span>
+                  )}
+                  {cs.posttest !== undefined && (
+                    <span className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700">
+                      📋{cs.posttest}
+                    </span>
+                  )}
+                  {cs.pengayaan !== undefined && (
+                    <span className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-lg bg-purple-50 text-purple-700">
+                      🌟{cs.pengayaan}
+                    </span>
+                  )}
+                </div>
               </div>
             );
           })}
           {scoreCount === 0 && (
-            <p className="text-xs text-[#8A9E95] text-center py-3">Belum ada nilai</p>
+            <p className="text-sm text-[#8A9E95] text-center py-4">Belum ada nilai</p>
           )}
         </div>
       )}
