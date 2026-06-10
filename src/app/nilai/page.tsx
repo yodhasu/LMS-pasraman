@@ -225,6 +225,15 @@ function StudentView({ chapters, scores }: { chapters: any[]; scores: any[] }) {
 }
 
 // ── Teacher: Student Score Card ──
+function ScoreLabel({ label, value, color, bgColor }: { label: string; value: number; color: string; bgColor: string }) {
+  return (
+    <div className={`flex flex-col items-center min-w-[80px] px-3 py-2 rounded-xl ${bgColor}`}>
+      <span className={`text-[11px] font-bold ${color} uppercase tracking-wide`}>{label}</span>
+      <span className={`text-xl font-bold ${color} leading-tight mt-0.5`}>{value}</span>
+    </div>
+  );
+}
+
 function StudentScoreCard({
   student,
   chapters,
@@ -254,22 +263,22 @@ function StudentScoreCard({
         onClick={() => setExpanded(!expanded)}
         className="w-full p-5 flex items-center gap-4 text-left hover:bg-[#FBF8F4] transition-colors"
       >
-        <div className="w-12 h-12 rounded-xl bg-[#1F3D30] text-white flex items-center justify-center text-lg font-bold flex-shrink-0">
+        <div className="w-14 h-14 rounded-xl bg-[#1F3D30] text-white flex items-center justify-center text-xl font-bold flex-shrink-0">
           {(student.displayName ?? student.username)[0].toUpperCase()}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-[17px] font-semibold truncate">{student.displayName ?? student.username}</p>
+          <p className="text-lg font-semibold truncate">{student.displayName ?? student.username}</p>
           <p className="text-sm text-[#8A9E95]">@{student.username} · {scoreCount} nilai</p>
         </div>
         <div className="text-right flex-shrink-0">
           {avgScore !== null && (
             <div className="flex flex-col items-end">
-              <span className="text-[11px] text-[#8A9E95] font-medium">Rata-rata</span>
-              <span className={`text-xl font-bold ${isBelowKkm ? 'text-red-500' : 'text-[#1F3D30]'}`}>
+              <span className="text-xs text-[#8A9E95] font-medium">Rata-rata Nilai</span>
+              <span className={`text-2xl font-bold ${isBelowKkm ? 'text-red-500' : 'text-[#1F3D30]'}`}>
                 {avgScore}
               </span>
               {isBelowKkm && (
-                <span className="text-[11px] text-red-500 font-semibold mt-0.5">⬇ Di bawah KKM</span>
+                <span className="text-xs text-red-500 font-semibold mt-0.5">Di bawah KKM (70)</span>
               )}
             </div>
           )}
@@ -278,7 +287,7 @@ function StudentScoreCard({
       </button>
 
       {expanded && (
-        <div className="px-5 pb-5 space-y-2">
+        <div className="px-5 pb-5 space-y-3">
           {chapters.map((chapter: any, i: number) => {
             const cs = chapterScores[chapter.id];
             if (!cs || (cs.pretest === undefined && cs.posttest === undefined && cs.tugas === undefined && cs.pengayaan === undefined)) {
@@ -286,32 +295,26 @@ function StudentScoreCard({
             }
 
             return (
-              <div key={chapter.id} className="flex items-center gap-4 py-3 px-4 rounded-xl bg-[#FBF8F4]">
-                <div className="flex-shrink-0 w-16">
-                  <span className="text-[11px] font-bold text-[#8A9E95] uppercase block leading-tight">Bab</span>
-                  <span className="text-sm font-bold text-[#1F3D30]">{i + 1}</span>
+              <div key={chapter.id} className="py-4 px-4 rounded-xl bg-[#FBF8F4] space-y-3">
+                <div className="flex items-center gap-3">
+                  <div className="flex-shrink-0">
+                    <span className="text-[11px] font-bold text-[#8A9E95] uppercase block leading-tight">Bab</span>
+                    <span className="text-base font-bold text-[#1F3D30]">{i + 1}</span>
+                  </div>
+                  <span className="flex-1 truncate text-base font-semibold text-[#1F3D30]">{chapter.title}</span>
                 </div>
-                <span className="flex-1 truncate text-sm font-semibold text-[#1F3D30]">{chapter.title}</span>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   {cs.pretest !== undefined && (
-                    <span className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-lg bg-amber-50 text-amber-700">
-                      🧪{cs.pretest}
-                    </span>
+                    <ScoreLabel label="Pre-Test" value={cs.pretest} color="text-amber-700" bgColor="bg-amber-50" />
                   )}
                   {cs.tugas !== undefined && (
-                    <span className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700">
-                      📝{cs.tugas}
-                    </span>
+                    <ScoreLabel label="Tugas" value={cs.tugas} color="text-blue-700" bgColor="bg-blue-50" />
                   )}
                   {cs.posttest !== undefined && (
-                    <span className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700">
-                      📋{cs.posttest}
-                    </span>
+                    <ScoreLabel label="Post-Test" value={cs.posttest} color="text-emerald-700" bgColor="bg-emerald-50" />
                   )}
                   {cs.pengayaan !== undefined && (
-                    <span className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-lg bg-purple-50 text-purple-700">
-                      🌟{cs.pengayaan}
-                    </span>
+                    <ScoreLabel label="Pengayaan" value={cs.pengayaan} color="text-purple-700" bgColor="bg-purple-50" />
                   )}
                 </div>
               </div>
