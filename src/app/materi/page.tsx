@@ -66,10 +66,10 @@ export default function MateriPage() {
         </div>
       )}
 
-      {/* Class selector — hanya untuk teacher */}
+      {/* Class selector — hanya untuk teacher (simple, no card wrapper) */}
       {isTeacher && classes.length > 0 && (
-        <div className="bg-white rounded-2xl border border-[#1F3D30]/5 p-4">
-          <label className="block text-[13px] font-semibold text-[#3a5e4a] mb-2">Pilih Kelas</label>
+        <div>
+          <label className="block text-[13px] font-semibold text-[#3a5e4a] mb-1.5">Pilih Kelas</label>
           <select
             value={selectedClassId ?? ''}
             onChange={e => setSelectedClassId(e.target.value || null)}
@@ -88,15 +88,17 @@ export default function MateriPage() {
         </div>
       )}
 
-      {/* Empty state — guru belum pilih kelas, atau murid belum punya kelas */}
-      {chapters.length === 0 && (
-        <div className="bg-amber-50 text-amber-700 text-sm px-4 py-6 rounded-2xl text-center">
-          {isTeacher
-            ? 'Silakan pilih kelas terlebih dahulu untuk melihat materi yang sesuai.'
-            : 'Anda belum terdaftar di kelas mana pun. Hubungi guru untuk mendapatkan kelas.'}
+      {isTeacher && !selectedClassId ? (
+        <div className="bg-white rounded-2xl border border-[#1F3D30]/5 p-8 text-center">
+          <p className="text-lg">👆 Pilih kelas untuk melihat materi</p>
         </div>
-      )}
-
+      ) : chapters.length === 0 ? (
+        <div className="bg-white rounded-2xl border border-[#1F3D30]/5 p-8 text-center">
+          <p className="text-lg">
+            {isTeacher ? '📭 Belum ada bab di kelas ini' : 'Anda belum terdaftar di kelas mana pun. Hubungi guru untuk mendapatkan kelas.'}
+          </p>
+        </div>
+      ) : (
       <div className="grid grid-cols-2 gap-4">
         {chapters.map((chapter, i) => {
           const prog = progress[chapter.id];
@@ -139,6 +141,7 @@ export default function MateriPage() {
           );
         })}
       </div>
+      )}
     </div>
   );
 }
