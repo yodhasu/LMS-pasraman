@@ -60,15 +60,18 @@ export default function ChapterClient() {
   const chapterId = params.chapterId as string;
   const isTeacherMode = searchParams.get('teacher') === 'true';
 
-  const { chapters, loading: chLoading } = useChapters();
-  const { progress, user, refreshProgress } = useStudentProgress();
-  const { role } = useAuth();
+  const { classId: userClassId, role } = useAuth();
+  const isTeacher = role === 'teacher' || role === 'admin';
+  // Students see only their class's chapters for correct index/lock logic;
+  // teachers see all chapters regardless.
+  const visibleClassId = isTeacher ? undefined : userClassId;
+  const { chapters, loading: chLoading } = useChapters(0, visibleClassId);
+  const { progress, user, refreshProgress } = useStudentProgress(visibleClassId);
   const { materials, matProgress, loading: matLoading } = useChapterMaterials(chapterId);
   const [pretestResult, setPretestResult] = useState<{ score: number; answers: Record<string, number> } | null>(null);
   const [posttestResult, setPosttestResult] = useState<{ score: number; answers: Record<string, number> } | null>(null);
   const [completedTasks, setCompletedTasks] = useState<Record<number, boolean>>({});
 
-  const isTeacher = role === 'teacher' || role === 'admin';
   const teacherMode = isTeacher && isTeacherMode;
   const teacherView = isTeacher;
 
