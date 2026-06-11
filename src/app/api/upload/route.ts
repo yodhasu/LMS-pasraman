@@ -117,7 +117,7 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json(
-      { ok: false, message: 'Gagal mengupload file. Coba lagi.' },
+      { ok: false, message: `Gagal mengupload file: ${message}` },
       { status: 500 }
     );
   }

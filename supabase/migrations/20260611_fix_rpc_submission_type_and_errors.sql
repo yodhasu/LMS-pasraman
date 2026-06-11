@@ -1,6 +1,5 @@
--- Fix: save_chapter_batch and delete_chapter accept uuid (not text)
--- because chapters.id IS uuid in the live database
--- Also drops old text overloads that were incorrectly applied
+-- 2026-06-11: Fix save_chapter_batch to handle submission_type and better error messages
+-- Also ensure all column references use chapter_uid consistently
 
 create or replace function public.save_chapter_batch(
   p_chapter_id uuid,
@@ -20,6 +19,7 @@ declare
   v_item jsonb;
   v_task jsonb;
   v_question jsonb;
+  v_error text;
 begin
   if not public.is_teacher_or_admin() then
     raise exception 'Only teachers can save chapter data';
@@ -42,7 +42,6 @@ begin
     values (p_chapter_id, p_pengayaan->>'instruction');
   end if;
 
-  -- Fix: cast jsonb-extracted id to uuid for comparison with uuid column
   delete from public.chapter_materials where chapter_uid = p_chapter_id
     and id not in (select (value->>'id')::uuid from jsonb_array_elements(p_materials) where value->>'id' is not null);
   
@@ -66,30 +65,36 @@ begin
     end loop;
   end if;
 
+  -- Delete removed tasks (only if no submissions exist)
   delete from public.chapter_tasks where chapter_uid = p_chapter_id
     and id not in (select value->>'id' from jsonb_array_elements(p_tasks) where value->>'id' is not null)
     and not exists (select 1 from public.task_submissions where task_id = chapter_tasks.id);
+
+  -- Delete orphaned task questions
   delete from public.mcq_questions where chapter_uid = p_chapter_id and assessment = 'tugas'
     and task_id is not null
     and task_id not in (select id from public.chapter_tasks where chapter_uid = p_chapter_id);
   
+  -- Upsert tasks
   if jsonb_array_length(p_tasks) > 0 then
     for v_task in select * from jsonb_array_elements(p_tasks)
     loop
-      insert into public.chapter_tasks (id, chapter_uid, title, description, due_date, task_order)
+      insert into public.chapter_tasks (id, chapter_uid, title, description, due_date, task_order, submission_type)
       values (
         v_task->>'id',
         p_chapter_id,
         v_task->>'title',
         v_task->>'description',
         nullif(v_task->>'due_date', '')::date,
-        (v_task->>'task_order')::int
+        (v_task->>'task_order')::int,
+        coalesce(v_task->>'submission_type', 'mcq')
       )
       on conflict (id) do update set
         title = v_task->>'title',
         description = v_task->>'description',
         due_date = nullif(v_task->>'due_date', '')::date,
-        task_order = (v_task->>'task_order')::int;
+        task_order = (v_task->>'task_order')::int,
+        submission_type = coalesce(v_task->>'submission_type', 'mcq');
       
       delete from public.mcq_questions where chapter_uid = p_chapter_id and task_id = v_task->>'id' and assessment = 'tugas';
       
@@ -112,6 +117,7 @@ begin
     end loop;
   end if;
 
+  -- Pretest
   delete from public.mcq_questions where chapter_uid = p_chapter_id and assessment = 'pretest';
   
   if jsonb_array_length(p_pretest) > 0 then
@@ -130,6 +136,7 @@ begin
     end loop;
   end if;
 
+  -- Posttest
   delete from public.mcq_questions where chapter_uid = p_chapter_id and assessment = 'posttest';
   
   if jsonb_array_length(p_posttest) > 0 then
@@ -148,48 +155,17 @@ begin
     end loop;
   end if;
 
+  -- Reset student progress so they can re-do assessments after content update
   delete from public.chapter_progress where chapter_uid = p_chapter_id;
   delete from public.material_progress where material_id in (select id from public.chapter_materials where chapter_uid = p_chapter_id);
 
   return jsonb_build_object('ok', true, 'message', 'Bab berhasil disimpan');
+exception
+  when others then
+    get stacked diagnostics v_error = message_text;
+    return jsonb_build_object('ok', false, 'message', 'Gagal: ' || v_error);
 end;
 $$;
 
 revoke execute on function public.save_chapter_batch(uuid, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb) from public;
 grant execute on function public.save_chapter_batch(uuid, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb) to authenticated;
-
-create or replace function public.delete_chapter(
-  p_chapter_id uuid
-)
-returns jsonb
-language plpgsql
-security definer
-set search_path = public, extensions
-as $$
-begin
-  if not public.is_teacher_or_admin() then
-    raise exception 'Only teachers can delete chapters';
-  end if;
-
-  delete from public.pengayaan_submissions where chapter_uid = p_chapter_id;
-  delete from public.task_submissions where task_id in (select id from public.chapter_tasks where chapter_uid = p_chapter_id);
-  delete from public.material_progress where material_id in (select id from public.chapter_materials where chapter_uid = p_chapter_id);
-  delete from public.scores where chapter_uid = p_chapter_id;
-  delete from public.chapter_progress where chapter_uid = p_chapter_id;
-  delete from public.pengayaan_prompts where chapter_uid = p_chapter_id;
-  delete from public.mcq_questions where chapter_uid = p_chapter_id;
-  delete from public.chapter_tasks where chapter_uid = p_chapter_id;
-  delete from public.chapter_materials where chapter_uid = p_chapter_id;
-  delete from public.task_submissions where task_id in (select id from public.chapter_tasks where chapter_uid = p_chapter_id);
-  delete from public.chapters where uid = p_chapter_id;
-
-  return jsonb_build_object('ok', true, 'message', 'Bab berhasil dihapus');
-end;
-$$;
-
-revoke execute on function public.delete_chapter(uuid) from public;
-grant execute on function public.delete_chapter(uuid) to authenticated;
-
--- Drop incorrect text overloads that were applied earlier
-drop function if exists public.save_chapter_batch(text, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb);
-drop function if exists public.delete_chapter(text);

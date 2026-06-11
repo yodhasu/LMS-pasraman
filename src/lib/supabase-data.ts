@@ -305,6 +305,7 @@ export async function verifyUsernamePassword(
 export function useStudentProgress(classId?: string | null) {
   const [progress, setProgress] = useState<StudentProgressMap>({});
   const [user, setUser] = useState<ReturnType<typeof normalizeUser>>(null);
+  const [loaded, setLoaded] = useState(false);
 
   async function load(userId: string) {
     // Get chapter IDs — filtered by class if student has one
@@ -321,6 +322,7 @@ export function useStudentProgress(classId?: string | null) {
 
     if (error) {
       console.error('useStudentProgress supabase error:', error);
+      setLoaded(true);
       return;
     }
 
@@ -337,11 +339,26 @@ export function useStudentProgress(classId?: string | null) {
     }
 
     setProgress(mapped);
+    setLoaded(true);
   }
 
   useEffect(() => {
     let cancelled = false;
 
+    // ── Initial load: check existing session immediately ──
+    supabase.auth.getSession().then(({ data }) => {
+      if (cancelled) return;
+      const sessionUser = data.session?.user ?? null;
+      const normalized = normalizeUser(sessionUser);
+      if (normalized) {
+        setUser(normalized);
+        load(normalized.id);
+      } else {
+        setLoaded(true);
+      }
+    });
+
+    // ── Listen for future auth changes ──
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       const normalized = normalizeUser(session?.user ?? null);
       setUser(normalized);
@@ -355,7 +372,7 @@ export function useStudentProgress(classId?: string | null) {
     };
   }, []);
 
-  return { progress, user, refreshProgress: load };
+  return { progress, user, loaded, refreshProgress: load };
 }
 
 type RawChapterMaterial = {
@@ -759,6 +776,7 @@ export async function saveChapterBatch(
     materials: Array<{ id?: string; section_order: number; type: string; content: string; caption: string | null }>;
     tasks: Array<{
       id?: string; title: string; description: string; due_date: string | null; task_order: number;
+      submission_type?: string;
       questions: Array<{ id?: string; question_order: number; question: string; options: string[]; correct_index: number }>;
     }>;
     pretest: Array<{ id?: string; question_order: number; question: string; options: string[]; correct_index: number }>;
@@ -778,8 +796,9 @@ export async function saveChapterBatch(
     if (error) throw error;
     return result as { ok: boolean; message: string };
   } catch (err) {
-    console.error('saveChapterBatch failed:', err);
-    return { ok: false, message: 'Gagal menyimpan perubahan.' };
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('saveChapterBatch failed:', msg);
+    return { ok: false, message: `Gagal menyimpan perubahan. Detail: ${msg}` };
   }
 }
 

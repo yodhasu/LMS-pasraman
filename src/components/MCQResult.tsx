@@ -60,7 +60,7 @@ export default function MCQResult({ type, score, answers, questions }: Props) {
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-[#1F3D30] mb-1">{i + 1}. {q.question}</p>
                     <p className={isCorrect ? 'text-emerald-700' : 'text-red-700'}>
-                      Jawabanmu: {q.options[userAns] ?? '(tidak dijawab)'}
+                      Jawabanmu: {userAns !== undefined ? (q.options[userAns] || '(jawaban tidak terekam)') : '(tidak dijawab)'}
                     </p>
                     {!isCorrect && (
                       <p className="text-emerald-700 mt-0.5">✓ Jawaban benar: {q.options[q.correctIndex]}</p>

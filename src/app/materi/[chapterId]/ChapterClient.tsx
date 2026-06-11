@@ -67,7 +67,7 @@ export default function ChapterClient() {
   // teachers see all chapters regardless.
   const visibleClassId = isTeacher ? undefined : userClassId;
   const { chapters, loading: chLoading } = useChapters(0, visibleClassId);
-  const { progress, user, refreshProgress } = useStudentProgress(visibleClassId);
+  const { progress, user, loaded: progressLoaded, refreshProgress } = useStudentProgress(visibleClassId);
   const { materials, matProgress, loading: matLoading } = useChapterMaterials(chapterId);
   const [pretestResult, setPretestResult] = useState<{ score: number; answers: Record<string, number> } | null>(null);
   const [posttestResult, setPosttestResult] = useState<{ score: number; answers: Record<string, number> } | null>(null);
@@ -80,13 +80,11 @@ export default function ChapterClient() {
   const [pageReady, setPageReady] = useState(false);
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
-    if (chLoading || matLoading) return;
+    if (chLoading || matLoading || !progressLoaded) return;
     const chapter = chapters.find(c => c.id === chapterId);
     if (!chapter) { setPageReady(true); return; } // chapter not found — let fallback render handle it
-    // Progress may lag behind; give it one tick to arrive
-    const t = setTimeout(() => setPageReady(true), 80);
-    return () => clearTimeout(t);
-  }, [chLoading, matLoading, chapters, chapterId]);
+    setPageReady(true);
+  }, [chLoading, matLoading, progressLoaded, chapters, chapterId]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   const chapter = chapters.find(c => c.id === chapterId);
@@ -158,14 +156,14 @@ export default function ChapterClient() {
       setPretestResult({ score, answers });
       await markChapterStep(user.uid, chapterId, 'pretest');
       await saveScore(user.uid, chapterId, 'pretest', score);
-      refreshProgress(user.uid);
+      await refreshProgress(user.uid);
     }
   };
 
   const handleMaterialDone = async () => {
     if (!user) return;
     await markChapterStep(user.uid, chapterId, 'materi');
-    refreshProgress(user.uid);
+    await refreshProgress(user.uid);
   };
 
   const handleTugasComplete = (taskIdx: number) => async (score: number, answers: Record<string, number>) => {
@@ -183,7 +181,7 @@ export default function ChapterClient() {
     if (!hasOtherPending) {
       await markChapterStep(user.uid, chapterId, 'tugas');
     }
-    refreshProgress(user.uid);
+    await refreshProgress(user.uid);
   };
 
   const handlePostTestComplete = async (score: number, answers: Record<string, number>) => {
@@ -191,7 +189,7 @@ export default function ChapterClient() {
       setPosttestResult({ score, answers });
       await markChapterStep(user.uid, chapterId, 'posttest');
       await saveScore(user.uid, chapterId, 'posttest', score);
-      refreshProgress(user.uid);
+      await refreshProgress(user.uid);
     }
   };
 
@@ -291,6 +289,7 @@ export default function ChapterClient() {
         description: t.description,
         due_date: t.dueDate,
         task_order: i,
+        submission_type: t.type,
         questions: t.questions.map((q, qi) => ({
           id: q.id,
           question_order: qi,
