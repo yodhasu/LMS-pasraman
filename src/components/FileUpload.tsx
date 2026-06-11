@@ -2,17 +2,20 @@
 
 import { useState, useRef, DragEvent } from 'react';
 
+export interface UploadResult {
+  fileUrl: string;
+  fileName: string;
+  fileSize: number;
+  fileId: string;
+}
+
 interface Props {
-  /** Maximum file size in bytes (default 50MB) */
   maxSize?: number;
-  /** Allowed MIME types */
   accept?: string;
-  /** Called when file is selected — trigger the upload flow */
-  onFileSelected: (file: File) => void;
-  /** Whether upload is currently in progress */
-  uploading?: boolean;
-  /** Upload progress percentage (0-100) */
-  progress?: number;
+  /** Called when upload succeeds — passes the uploaded file info */
+  onUploadSuccess: (result: UploadResult) => void;
+  /** Called when upload fails */
+  onUploadError?: (error: string) => void;
   /** Optional custom label */
   label?: string;
   /** Disable the uploader */
@@ -22,17 +25,72 @@ interface Props {
 const DEFAULT_ACCEPT = '.pdf,.jpg,.jpeg,.png,.webp,.gif,.mp4,.webm,.doc,.docx,.ppt,.pptx,.txt,.csv,.zip,.rar';
 
 export default function FileUpload({
-  maxSize = 50 * 1024 * 1024, // 50MB
+  maxSize = 50 * 1024 * 1024,
   accept = DEFAULT_ACCEPT,
-  onFileSelected,
-  uploading = false,
-  progress = 0,
+  onUploadSuccess,
+  onUploadError,
   label,
   disabled = false,
 }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [progress, setProgress] = useState(0);
+
+  const uploadFile = async (file: File) => {
+    setError(null);
+    setUploading(true);
+    setProgress(0);
+
+    // Simulate progress (real progress tracking needs XHR)
+    const interval = setInterval(() => {
+      setProgress(p => Math.min(p + 10, 90));
+    }, 500);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('type', 'student');
+
+      const res = await fetch('/api/upload', { method: 'POST', body: formData });
+      const data = await res.json();
+
+      clearInterval(interval);
+      setProgress(100);
+
+      if (!res.ok) {
+        const message = data?.message || 'Gagal mengupload file.';
+        // Handle reauth case
+        if (data?.action === 'reauth') {
+          setError('Akun Google Drive belum terhubung. Admin perlu login ulang.');
+          if (onUploadError) onUploadError(message);
+        } else {
+          setError(message);
+          if (onUploadError) onUploadError(message);
+        }
+        setUploading(false);
+        return;
+      }
+
+      setTimeout(() => {
+        setUploading(false);
+        setProgress(0);
+        onUploadSuccess({
+          fileUrl: data.data.fileUrl,
+          fileName: data.data.fileName,
+          fileSize: data.data.fileSize,
+          fileId: data.data.fileId,
+        });
+      }, 300);
+    } catch (err) {
+      clearInterval(interval);
+      const message = err instanceof Error ? err.message : 'Gagal mengupload file.';
+      setError(message);
+      if (onUploadError) onUploadError(message);
+      setUploading(false);
+    }
+  };
 
   const validateFile = (file: File): boolean => {
     setError(null);
@@ -45,7 +103,7 @@ export default function FileUpload({
 
   const handleFile = (file: File) => {
     if (!validateFile(file)) return;
-    onFileSelected(file);
+    uploadFile(file);
   };
 
   const handleDrop = (e: DragEvent<HTMLDivElement>) => {
@@ -73,7 +131,6 @@ export default function FileUpload({
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) handleFile(file);
-    // Reset so re-selecting the same file triggers onChange
     e.target.value = '';
   };
 
@@ -138,28 +195,6 @@ export default function FileUpload({
       {error && (
         <p className="text-xs font-medium text-red-500">{error}</p>
       )}
-    </div>
-  );
-}
-
-// ── Upload Not Available Modal ──
-
-export function UploadNotAvailableModal({ onClose }: { onClose: () => void }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl max-w-sm mx-4 p-6 text-center space-y-4 shadow-xl">
-        <span className="text-5xl block">🚧</span>
-        <h3 className="text-lg font-bold text-[#1F3D30]">Upload Belum Tersedia</h3>
-        <p className="text-sm text-[#5C7A6E]">
-          Fitur upload file masih dalam tahap pengembangan. Guru akan mengaktifkannya segera.
-        </p>
-        <button
-          onClick={onClose}
-          className="w-full py-2.5 bg-[#1F3D30] text-white rounded-xl text-sm font-semibold hover:bg-[#2A5A44] transition-colors"
-        >
-          Tutup
-        </button>
-      </div>
     </div>
   );
 }

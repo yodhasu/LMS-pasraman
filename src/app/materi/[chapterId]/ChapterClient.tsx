@@ -13,7 +13,7 @@ import ChapterContent from '@/components/ChapterContent';
 import { useState, useEffect } from 'react';
 import { ChapterProgressDetail, Chapter, ChapterMaterial, ChapterTask, MCQ, PengayaanAnswer } from '@/lib/types';
 import MCQResult from '@/components/MCQResult';
-import FileUpload, { UploadNotAvailableModal } from '@/components/FileUpload';
+import FileUpload from '@/components/FileUpload';
 
 function SectionCard({ step, title, description, done, unlocked, children }: {
   step: number; title: string; description: string; done: boolean; unlocked: boolean; children?: React.ReactNode;
@@ -120,7 +120,6 @@ export default function ChapterClient() {
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [dataLoaded, setDataLoaded] = useState(false);
-  const [showUploadModal, setShowUploadModal] = useState(false);
 
   // ── Init edit state from DB data ──
   /* eslint-disable react-hooks/set-state-in-effect */
@@ -507,10 +506,17 @@ export default function ChapterClient() {
                   <div className="space-y-2">
                     <input value={mat.content} onChange={e => updateMaterial(i, { content: e.target.value })}
                       className="w-full px-3 py-2 text-sm border border-[#d4dcd0] rounded-lg" placeholder="URL..." />
-                    <button onClick={() => setShowUploadModal(true)}
-                      className="text-xs text-[#1F3D30] font-semibold hover:underline flex items-center gap-1">
-                      📎 Upload file (ganti link)
-                    </button>
+                    <FileUpload
+                      maxSize={200 * 1024 * 1024}
+                      onUploadSuccess={(result) => {
+                        updateMaterial(i, {
+                          content: result.fileUrl,
+                          fileUrl: result.fileUrl,
+                          fileName: result.fileName,
+                          fileSize: result.fileSize,
+                        });
+                      }}
+                    />
                     {mat.fileUrl && (
                       <p className="text-[10px] text-emerald-700">File: {mat.fileName ?? mat.fileUrl}</p>
                     )}
@@ -642,7 +648,6 @@ export default function ChapterClient() {
           )}
         </div>
       </div>
-      {showUploadModal && <UploadNotAvailableModal onClose={() => setShowUploadModal(false)} />}
     </>
   );
   }
@@ -732,18 +737,35 @@ export default function ChapterClient() {
                         className="w-full px-3 py-2 border border-[#d4dcd0] rounded-xl text-sm resize-none"
                         placeholder="Tulis jawaban Anda di sini..."
                       />
-                      <button onClick={() => setShowUploadModal(true)}
-                        className="px-4 py-2 bg-[#1F3D30] text-white rounded-xl text-sm font-semibold disabled:opacity-50">
+                      <button
+                        className="px-4 py-2 bg-[#1F3D30]/50 text-white rounded-xl text-sm font-semibold cursor-not-allowed">
                         Kirim Jawaban
                       </button>
+                      <p className="text-[10px] text-[#8A9E95]">Tugas isian teks belum tersedia.</p>
                     </div>
                   ) : (
-                    <div>
-                      <button onClick={() => setShowUploadModal(true)}
-                        className="px-4 py-2 bg-[#1F3D30] text-white rounded-xl text-sm font-semibold hover:bg-[#2A5A44] transition-colors">
-                        📎 Upload File Tugas
-                      </button>
-                    </div>
+                    <FileUpload
+                      maxSize={50 * 1024 * 1024}
+                      label="Upload file tugas"
+                      onUploadSuccess={async (result) => {
+                        if (!user || !chapter) return;
+                        await submitTaskAnswer(
+                          chapterId, tIdx, user.uid, displayName,
+                          {}, 0, null,
+                          { fileUrl: result.fileUrl, fileName: result.fileName, fileSize: result.fileSize }
+                        );
+                        const nextCompleted = { ...completedTasks, [tIdx]: true };
+                        setCompletedTasks(nextCompleted);
+                        const hasOtherPending = chapter.tasks.some((task, i) => {
+                          if (i === tIdx || nextCompleted[i]) return false;
+                          return !(task.answer || []).some(a => a.userId === user.uid);
+                        });
+                        if (!hasOtherPending) {
+                          await markChapterStep(user.uid, chapterId, 'tugas');
+                        }
+                        refreshProgress(user.uid);
+                      }}
+                    />
                   )
                 ) : (
                   <p className="text-sm text-emerald-700 font-medium">✅ Tugas sudah dikerjakan</p>
@@ -784,7 +806,6 @@ export default function ChapterClient() {
         />
       )}
     </div>
-    {showUploadModal && <UploadNotAvailableModal onClose={() => setShowUploadModal(false)} />}
   </>
   );
 }
@@ -879,7 +900,6 @@ function PengayaanSection({ step, chapterId, postTestOptional, unlocked, user, d
   const submitted = !!myAnswer || submittedLocally;
   const [link, setLink] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [showPengayaanUploadModal, setShowPengayaanUploadModal] = useState(false);
 
   const handleSubmit = async () => {
     if (!user || !link || submitting) return;
@@ -912,10 +932,18 @@ function PengayaanSection({ step, chapterId, postTestOptional, unlocked, user, d
               <span className="text-[10px] text-[#8A9E95] uppercase font-semibold">Atau</span>
               <div className="flex-1 h-px bg-[#d4dcd0]" />
             </div>
-            <button onClick={() => setShowPengayaanUploadModal(true)}
-              className="w-full py-2.5 bg-[#FBF8F4] border border-dashed border-[#1F3D30]/20 rounded-xl text-sm text-[#5C7A6E] font-semibold hover:bg-[#f2f4f0] transition-colors">
-              📎 Upload File
-            </button>
+            <FileUpload
+              maxSize={50 * 1024 * 1024}
+              label="Upload file pengayaan"
+              onUploadSuccess={async (result) => {
+                if (!user) return;
+                await submitPengayaanLink(
+                  chapterId, user.uid, displayName, '',
+                  { fileUrl: result.fileUrl, fileName: result.fileName, fileSize: result.fileSize }
+                );
+                setSubmittedLocally(true);
+              }}
+            />
           </div>
         ) : (
           <div>
@@ -927,7 +955,6 @@ function PengayaanSection({ step, chapterId, postTestOptional, unlocked, user, d
           </div>
         )}
       </div>
-      {showPengayaanUploadModal && <UploadNotAvailableModal onClose={() => setShowPengayaanUploadModal(false)} />}
     </SectionCard>
   );
 }
