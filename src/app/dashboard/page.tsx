@@ -62,10 +62,10 @@ function ProgressBar({ pct, label }: { pct: number; label: string }) {
 // MAIN DASHBOARD PAGE
 // ══════════════════════════════════════
 export default function DashboardPage() {
-  const { user, role, loading: authLoading } = useAuth();
+  const { user, role, loading: authLoading, classId: userClassId } = useAuth();
   const { classes: teacherClasses, loading: clsLoading } = useTeacherClasses();
-  const { chapters, loading: chLoading } = useChapters();
-  const { progress: studentProgress } = useStudentProgress();
+  const { chapters, loading: chLoading } = useChapters(0, userClassId);
+  const { progress: studentProgress } = useStudentProgress(userClassId);
   const { scores } = useNilai();
   const isTeacher = role === 'teacher' || role === 'admin';
 
