@@ -538,7 +538,7 @@ export async function markChapterStep(
       .eq('chapter_id', chapterId)
       .maybeSingle();
 
-    const merged = {
+    const merged: Record<string, unknown> = {
       user_id: userId,
       chapter_id: chapterId,
       pretest: existing?.pretest ?? false,
@@ -546,12 +546,8 @@ export async function markChapterStep(
       tugas: existing?.tugas ?? false,
       posttest: existing?.posttest ?? false,
       [step]: true,
-      // Auto-compute `complete` when all 4 steps are done
-      complete: ((existing?.pretest ?? false) || step === 'pretest')
-           && ((existing?.materi ?? false) || step === 'materi')
-           && ((existing?.tugas ?? false) || step === 'tugas')
-           && ((existing?.posttest ?? false) || step === 'posttest'),
     };
+    // Note: 'complete' is a generated column in the DB, auto-computed
 
     const { error } = await supabase
       .from('chapter_progress')
