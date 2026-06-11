@@ -42,16 +42,8 @@ const EMPTY_PROGRESS: ChapterProgressDetail = {
 };
 
 // ── Helpers ──
-let idCounter = 0;
-function uuid(): string {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
-    const r = (Date.now() + idCounter * 1000) % 16 | 0;
-    idCounter++;
-    return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
-  });
-}
 function freshId(): string {
-  return uuid();
+  return crypto.randomUUID();
 }
 
 export default function ChapterClient() {

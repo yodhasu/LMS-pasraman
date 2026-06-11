@@ -111,7 +111,12 @@ begin
             v_question->>'question',
             v_question->'options',
             (v_question->>'correct_index')::int
-          );
+          )
+          on conflict (id) do update set
+            question_order = (v_question->>'question_order')::int,
+            question = v_question->>'question',
+            options = v_question->'options',
+            correct_index = (v_question->>'correct_index')::int;
         end loop;
       end if;
     end loop;
@@ -132,7 +137,12 @@ begin
         v_question->>'question',
         v_question->'options',
         (v_question->>'correct_index')::int
-      );
+      )
+      on conflict (id) do update set
+        question_order = (v_question->>'question_order')::int,
+        question = v_question->>'question',
+        options = v_question->'options',
+        correct_index = (v_question->>'correct_index')::int;
     end loop;
   end if;
 
@@ -151,7 +161,12 @@ begin
         v_question->>'question',
         v_question->'options',
         (v_question->>'correct_index')::int
-      );
+      )
+      on conflict (id) do update set
+        question_order = (v_question->>'question_order')::int,
+        question = v_question->>'question',
+        options = v_question->'options',
+        correct_index = (v_question->>'correct_index')::int;
     end loop;
   end if;
 
