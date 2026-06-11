@@ -35,25 +35,15 @@ export default function VideoPlayer({ url }: { url: string | null }) {
 
   if (driveId) {
     const directUrl = `https://drive.google.com/uc?export=download&id=${driveId}`;
-    const previewUrl = `https://drive.google.com/file/d/${driveId}/preview`;
     return (
       <div className="my-6 space-y-3">
-        {/* Embedded player: shows preview in an iframe (works for most file types) */}
-        <div className="rounded-xl overflow-hidden bg-black aspect-video">
-          <iframe
-            src={previewUrl}
-            className="w-full h-full"
-            allow="autoplay"
-            allowFullScreen
-            title="Video dari Google Drive"
-          />
-        </div>
-        {/* Fallback video tag — directly streams the video file */}
+        {/* Direct HTML5 video stream from Google Drive */}
         {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
         <video
           controls
-          className="w-full rounded-xl"
+          className="w-full rounded-xl bg-black"
           preload="metadata"
+          playsInline
         >
           <source src={directUrl} type="video/mp4" />
           <source src={directUrl} type="video/webm" />

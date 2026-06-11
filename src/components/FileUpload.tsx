@@ -22,6 +22,8 @@ interface Props {
   /** When true, skip finalize (permission + rename). File stays private in Drive.
    *  Use for teacher edit mode where files are finalized on chapter save. */
   deferFinalize?: boolean;
+  /** Called when upload starts/stops — parent can disable save button */
+  onUploadingChange?: (uploading: boolean) => void;
 }
 
 const DEFAULT_ACCEPT = '.pdf,.jpg,.jpeg,.png,.webp,.gif,.mp4,.webm,.doc,.docx,.ppt,.pptx,.txt,.csv,.zip,.rar';
@@ -36,7 +38,8 @@ export default function FileUpload({
   disabled = false,
   uploadType = 'student',
   deferFinalize = false,
-}: Props) {
+  onUploadingChange,
+ }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -47,6 +50,7 @@ export default function FileUpload({
   const uploadFile = async (file: File) => {
     setError(null);
     setUploading(true);
+    onUploadingChange?.(true);
     setProgress(0);
     setPhase('Menyiapkan...');
 
@@ -151,6 +155,7 @@ export default function FileUpload({
       if (onUploadError) onUploadError(message);
     } finally {
       setUploading(false);
+      onUploadingChange?.(false);
       setTimeout(() => { setProgress(0); setPhase(''); }, 3000);
     }
   };

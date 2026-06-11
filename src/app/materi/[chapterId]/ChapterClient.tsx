@@ -123,6 +123,7 @@ export default function ChapterClient() {
   const [showUnsavedModal, setShowUnsavedModal] = useState(false);
   const [pendingNavigation, setPendingNavigation] = useState<string | null>(null);
   const [cleaningUp, setCleaningUp] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
 
   // ── Init edit state from DB data ──
   /* eslint-disable react-hooks/set-state-in-effect */
@@ -605,7 +606,7 @@ export default function ChapterClient() {
       )}
       <div className="max-w-2xl mx-auto space-y-5 pb-8">
         <div className="flex items-center justify-between">
-          <button onClick={handleCancelEdit} disabled={cleaningUp}
+          <button onClick={handleCancelEdit} disabled={cleaningUp || isUploading}
             className="inline-flex items-center gap-1.5 text-sm text-[#5C7A6E] hover:text-[#1F3D30]">
             {cleaningUp ? '⏳ Membersihkan...' : '← Kembali ke Materi'}
           </button>
@@ -708,6 +709,7 @@ export default function ChapterClient() {
                       maxSize={100 * 1024 * 1024}
                       uploadType="teacher"
                       deferFinalize
+                      onUploadingChange={setIsUploading}
                       onUploadSuccess={(result) => {
                         if (!result.fileId) return;
                         setPendingFiles(prev => [...prev, {
@@ -852,9 +854,9 @@ export default function ChapterClient() {
               {deleting ? 'Menghapus...' : confirmDelete ? 'Klik lagi untuk konfirmasi' : '🗑️ Hapus Bab Ini'}
             </button>
             <div className="flex-1" />
-            <button onClick={handleSaveAll} disabled={saving}
+            <button onClick={handleSaveAll} disabled={saving || isUploading}
               className="px-6 py-2.5 bg-[#1F3D30] text-white rounded-xl text-sm font-semibold hover:bg-[#2A5A44] transition-colors disabled:opacity-50 flex items-center gap-2">
-              {saving ? '⏳ Menyimpan...' : '💾 Simpan Perubahan'}
+              {saving ? '⏳ Menyimpan...' : isUploading ? '⏳ Mengupload file...' : '💾 Simpan Perubahan'}
             </button>
           </div>
           {saveMsg && (
