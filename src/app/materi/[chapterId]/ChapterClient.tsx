@@ -499,6 +499,7 @@ export default function ChapterClient() {
                       className="w-full px-3 py-2 text-sm border border-[#d4dcd0] rounded-lg" placeholder="URL..." />
                     <FileUpload
                       maxSize={200 * 1024 * 1024}
+                      uploadType="teacher"
                       onUploadSuccess={(result) => {
                         updateMaterial(i, {
                           content: result.fileUrl,
@@ -737,6 +738,7 @@ export default function ChapterClient() {
                   ) : (
                     <FileUpload
                       maxSize={50 * 1024 * 1024}
+                      uploadType="student"
                       label="Upload file tugas"
                       onUploadSuccess={async (result) => {
                         if (!user || !chapter) return;
@@ -925,6 +927,7 @@ function PengayaanSection({ step, chapterId, postTestOptional, unlocked, user, d
             </div>
             <FileUpload
               maxSize={50 * 1024 * 1024}
+              uploadType="student"
               label="Upload file pengayaan"
               onUploadSuccess={async (result) => {
                 if (!user) return;

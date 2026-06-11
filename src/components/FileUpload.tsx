@@ -12,14 +12,12 @@ export interface UploadResult {
 interface Props {
   maxSize?: number;
   accept?: string;
-  /** Called when upload succeeds — passes the uploaded file info */
   onUploadSuccess: (result: UploadResult) => void;
-  /** Called when upload fails */
   onUploadError?: (error: string) => void;
-  /** Optional custom label */
   label?: string;
-  /** Disable the uploader */
   disabled?: boolean;
+  /** 'student' | 'teacher' — determines which Gdrive folder files land in */
+  uploadType?: 'student' | 'teacher';
 }
 
 const DEFAULT_ACCEPT = '.pdf,.jpg,.jpeg,.png,.webp,.gif,.mp4,.webm,.doc,.docx,.ppt,.pptx,.txt,.csv,.zip,.rar';
@@ -31,6 +29,7 @@ export default function FileUpload({
   onUploadError,
   label,
   disabled = false,
+  uploadType = 'student',
 }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -41,159 +40,175 @@ export default function FileUpload({
   const uploadFile = async (file: File) => {
     setError(null);
     setUploading(true);
-    setProgress(0);
-
-    // Simulate progress (real progress tracking needs XHR)
-    const interval = setInterval(() => {
-      setProgress(p => Math.min(p + 10, 90));
-    }, 500);
+    setProgress(5);
 
     try {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('type', 'student');
+      // Step 1: Initiate resumable upload session
+      const initRes = await fetch('/api/upload/init', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fileName: file.name,
+          mimeType: file.type || 'application/octet-stream',
+          fileSize: file.size,
+          uploadType,
+        }),
+      });
 
-      const res = await fetch('/api/upload', { method: 'POST', body: formData });
-      const data = await res.json();
-
-      clearInterval(interval);
-      setProgress(100);
-
-      if (!res.ok) {
-        const message = data?.message || 'Gagal mengupload file.';
-        // Handle reauth case
-        if (data?.action === 'reauth') {
+      const initData = await initRes.json();
+      if (!initRes.ok) {
+        if (initData?.action === 'reauth') {
           setError('Akun Google Drive belum terhubung. Admin perlu login ulang.');
-          if (onUploadError) onUploadError(message);
+          if (onUploadError) onUploadError(initData.message || 'Reauth needed');
         } else {
-          setError(message);
-          if (onUploadError) onUploadError(message);
+          setError(initData.message || 'Gagal memulai upload.');
+          if (onUploadError) onUploadError(initData.message || 'Init failed');
         }
         setUploading(false);
         return;
       }
 
-      setTimeout(() => {
-        setUploading(false);
-        setProgress(0);
-        onUploadSuccess({
-          fileUrl: data.data.fileUrl,
-          fileName: data.data.fileName,
-          fileSize: data.data.fileSize,
-          fileId: data.data.fileId,
-        });
-      }, 300);
+      const { uploadUrl } = initData;
+      setProgress(20);
+
+      // Step 2: Upload file directly to Google Drive (bypasses our server!)
+      const uploadRes = await fetch(uploadUrl, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': file.type || 'application/octet-stream',
+          'Content-Length': String(file.size),
+        },
+        body: file,
+      });
+
+      if (!uploadRes.ok) {
+        const errText = await uploadRes.text().catch(() => 'Unknown error');
+        throw new Error(`Upload ke Drive gagal (${uploadRes.status}): ${errText}`);
+      }
+
+      setProgress(80);
+
+      // Get file ID from response
+      const uploadedFile = await uploadRes.json();
+      const fileId = uploadedFile.id || uploadedFile.fileId;
+      if (!fileId) throw new Error('Upload berhasil tapi file ID tidak diketahui.');
+
+      // Step 3: Finalize — set permissions and get public URL
+      const finalRes = await fetch('/api/upload/finalize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileId }),
+      });
+
+      const finalData = await finalRes.json();
+      if (!finalRes.ok) throw new Error(finalData.message || 'Gagal finalisasi upload.');
+
+      setProgress(100);
+
+      onUploadSuccess({
+        fileUrl: finalData.data.fileUrl,
+        fileName: finalData.data.fileName,
+        fileSize: finalData.data.fileSize,
+        fileId: finalData.data.fileId,
+      });
     } catch (err) {
-      clearInterval(interval);
-      const message = err instanceof Error ? err.message : 'Gagal mengupload file.';
+      const message = err instanceof Error ? err.message : String(err);
       setError(message);
       if (onUploadError) onUploadError(message);
+    } finally {
       setUploading(false);
+      setTimeout(() => setProgress(0), 2000);
     }
-  };
-
-  const validateFile = (file: File): boolean => {
-    setError(null);
-    if (file.size > maxSize) {
-      setError(`Ukuran file terlalu besar (maks ${(maxSize / 1024 / 1024).toFixed(0)}MB).`);
-      return false;
-    }
-    return true;
-  };
-
-  const handleFile = (file: File) => {
-    if (!validateFile(file)) return;
-    uploadFile(file);
   };
 
   const handleDrop = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setDragOver(false);
-    const file = e.dataTransfer.files[0];
-    if (file) handleFile(file);
+    const f = e.dataTransfer.files[0];
+    if (f) {
+      if (f.size > maxSize) {
+        setError(`Ukuran file terlalu besar (maks ${(maxSize / 1024 / 1024).toFixed(0)}MB).`);
+        return;
+      }
+      uploadFile(f);
+    }
   };
 
-  const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    setDragOver(true);
-  };
-
-  const handleDragLeave = (e: DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    setDragOver(false);
-  };
-
-  const handleClick = () => {
-    if (disabled || uploading) return;
-    inputRef.current?.click();
-  };
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) handleFile(file);
-    e.target.value = '';
+  const handleSelect = () => {
+    const f = inputRef.current?.files?.[0];
+    if (f) {
+      if (f.size > maxSize) {
+        setError(`Ukuran file terlalu besar (maks ${(maxSize / 1024 / 1024).toFixed(0)}MB).`);
+        return;
+      }
+      uploadFile(f);
+    }
   };
 
   return (
     <div className="space-y-2">
-      {label && (
-        <p className="text-xs font-semibold text-[#5C7A6E]">{label}</p>
-      )}
-
       <div
-        onClick={handleClick}
+        onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+        onDragLeave={() => setDragOver(false)}
         onDrop={handleDrop}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        className={`
-          relative border-2 border-dashed rounded-xl p-4 text-center cursor-pointer
-          transition-all duration-200
-          ${disabled ? 'opacity-50 cursor-not-allowed' : ''}
-          ${dragOver ? 'border-[#1F3D30] bg-[#1F3D30]/5 scale-[1.02]' : 'border-[#d4dcd0] hover:border-[#1F3D30]/40 bg-[#FBF8F4]'}
-          ${uploading ? 'pointer-events-none' : ''}
-        `}
+        onClick={() => !uploading && !disabled && inputRef.current?.click()}
+        className={`relative border-2 border-dashed rounded-xl p-4 text-center cursor-pointer transition-all ${
+          disabled ? 'opacity-50 cursor-not-allowed' :
+          dragOver ? 'border-[#1F3D30] bg-[#1F3D30]/5' :
+          'border-[#1F3D30]/20 hover:border-[#1F3D30]/40 bg-white'
+        }`}
       >
         <input
           ref={inputRef}
           type="file"
           accept={accept}
-          onChange={handleChange}
+          onChange={handleSelect}
           className="hidden"
           disabled={disabled || uploading}
         />
 
         {uploading ? (
           <div className="space-y-2">
-            <span className="text-2xl">⏳</span>
-            <p className="text-xs text-[#5C7A6E]">Mengupload...</p>
-            <div className="w-full h-2 bg-[#d4dcd0] rounded-full overflow-hidden">
+            <div className="text-sm text-[#5C7A6E]">
+              {progress < 20 ? '⏳ Menyiapkan upload...' :
+               progress < 80 ? '📤 Mengupload ke Drive...' :
+               '🔧 Menyelesaikan...'}
+            </div>
+            <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
               <div
                 className="h-full bg-[#1F3D30] rounded-full transition-all duration-300"
                 style={{ width: `${progress}%` }}
               />
             </div>
-            <p className="text-[10px] text-[#8A9E95]">{progress}%</p>
-          </div>
-        ) : dragOver ? (
-          <div className="space-y-1">
-            <span className="text-2xl">📥</span>
-            <p className="text-xs font-medium text-[#1F3D30]">Lepaskan file di sini</p>
+            <span className="text-xs text-[#8A9E95]">{progress}%</span>
           </div>
         ) : (
-          <div className="space-y-1">
-            <span className="text-2xl">📎</span>
-            <p className="text-xs text-[#5C7A6E]">
-              Drag & drop file, atau klik untuk memilih
-            </p>
-            <p className="text-[10px] text-[#8A9E95]">
-              PDF, JPG, PNG, MP4, DOC, PPT — maks {(maxSize / 1024 / 1024).toFixed(0)}MB
-            </p>
+          <div className="text-sm text-[#5C7A6E]">
+            {label || (
+              <>
+                <span className="font-medium text-[#1F3D30]">Klik atau seret file</span> ke sini
+                <br />
+                <span className="text-[11px]">
+                  Maks {(maxSize / 1024 / 1024).toFixed(0)}MB
+                  {accept !== '*' && ` — ${accept.split(',').slice(0, 4).join(', ')}${accept.split(',').length > 4 ? '...' : ''}`}
+                </span>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Upload type badge */}
+        {!uploading && (
+          <div className="mt-2 text-[10px] text-[#8A9E95]">
+            {uploadType === 'teacher' ? '👨‍🏫 Upload sebagai Guru' : '🎒 Upload sebagai Murid'}
           </div>
         )}
       </div>
 
       {error && (
-        <p className="text-xs font-medium text-red-500">{error}</p>
+        <div className="text-xs text-red-600 bg-red-50 p-2 rounded-lg">
+          ❌ {error}
+        </div>
       )}
     </div>
   );
