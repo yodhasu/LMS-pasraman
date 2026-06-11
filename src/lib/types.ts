@@ -14,6 +14,10 @@ export interface TaskAnswer {
   answers: Record<string, number>; // questionId → selectedIndex
   score: number;
   submittedAt: string; // ISO timestamp
+  fileUrl?: string | null;   // for file upload tasks
+  fileName?: string | null;
+  fileSize?: number | null;
+  textAnswer?: string | null; // for text submission tasks
 }
 
 export interface PengayaanAnswer {
@@ -21,6 +25,9 @@ export interface PengayaanAnswer {
   userName: string;
   link: string;
   submittedAt: string;
+  fileUrl?: string | null;
+  fileName?: string | null;
+  fileSize?: number | null;
 }
 
 // ── Chapter Task — now supports MCQ ──
@@ -29,7 +36,7 @@ export interface ChapterTask {
   title: string;
   description: string;
   dueDate: string | null;
-  type: 'mcq';
+  type: 'mcq' | 'text' | 'file';
   questions: MCQ[]; // MCQ questions for this task
   answer: TaskAnswer[]; // student submissions
 }
@@ -39,9 +46,12 @@ export interface ChapterMaterial {
   id: string;
   chapterId: string;
   sectionOrder: number;
-  type: 'text' | 'image' | 'video' | 'embed';
+  type: 'text' | 'image' | 'video' | 'embed' | 'file';
   content: string;    // markdown for 'text', URL for 'image'/'video'/'embed'
   caption: string | null;
+  fileUrl?: string | null;   // for uploaded files
+  fileName?: string | null;
+  fileSize?: number | null;
 }
 
 export interface MaterialProgressMap {

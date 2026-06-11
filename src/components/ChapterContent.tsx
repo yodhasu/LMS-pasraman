@@ -24,6 +24,7 @@ function MaterialIcon({ type }: { type: ChapterMaterial['type'] }) {
     case 'image': return <span>🖼️</span>;
     case 'video': return <span>🎬</span>;
     case 'embed': return <span>🔗</span>;
+    case 'file': return <span>📎</span>;
   }
 }
 
@@ -33,6 +34,7 @@ function MaterialLabel({ type }: { type: ChapterMaterial['type'] }) {
     case 'image': return 'Gambar';
     case 'video': return 'Video';
     case 'embed': return 'Referensi';
+    case 'file': return 'File';
   }
 }
 
@@ -76,6 +78,7 @@ function MaterialForm({
             <option value="image">Image</option>
             <option value="video">Video</option>
             <option value="embed">Embed/Link</option>
+            <option value="file">File</option>
           </select>
         </div>
         <div className="md:col-span-2">
@@ -91,13 +94,20 @@ function MaterialForm({
 
       <div>
         <label className="block text-[11px] font-semibold uppercase text-[#5C7A6E] mb-1">Content</label>
-        <textarea
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          rows={type === 'text' ? 10 : 4}
-          placeholder={placeholder}
-          className="w-full px-3 py-2 border border-[#d4dcd0] rounded-xl text-sm bg-white resize-y"
-        />
+        {type === 'file' ? (
+          <div className="flex items-center gap-2 p-3 bg-[#FBF8F4] rounded-xl border border-dashed border-[#1F3D30]/20">
+            <span className="text-lg">📎</span>
+            <span className="text-sm text-[#5C7A6E]">Upload file belum tersedia (Gdrive Phase 2).</span>
+          </div>
+        ) : (
+          <textarea
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            rows={type === 'text' ? 10 : 4}
+            placeholder={placeholder}
+            className="w-full px-3 py-2 border border-[#d4dcd0] rounded-xl text-sm bg-white resize-y"
+          />
+        )}
       </div>
 
       <div className="flex gap-2">
@@ -279,6 +289,35 @@ export default function ChapterContent({
                         >
                           🔗 {material.caption || material.content}
                         </a>
+                      </div>
+                    )}
+
+                    {material.type === 'file' && (
+                      <div>
+                        <div className="flex items-center gap-3 p-3 bg-[#FBF8F4] rounded-xl border border-[#1F3D30]/5">
+                          <span className="text-2xl">📎</span>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-[#1F3D30] truncate">
+                              {material.fileName || material.content || 'File'}
+                            </p>
+                            {material.fileSize && (
+                              <p className="text-[10px] text-[#8A9E95]">
+                                {(material.fileSize / 1024 / 1024).toFixed(1)} MB
+                              </p>
+                            )}
+                          </div>
+                          <a
+                            href={material.fileUrl || material.content}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-3 py-1.5 bg-[#1F3D30] text-white rounded-lg text-xs font-semibold hover:bg-[#2A5A44] transition-colors flex-shrink-0"
+                          >
+                            Buka
+                          </a>
+                        </div>
+                        {material.caption && (
+                          <p className="text-xs text-[#5C7A6E] mt-2">{material.caption}</p>
+                        )}
                       </div>
                     )}
                   </>

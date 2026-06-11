@@ -13,6 +13,7 @@ import ChapterContent from '@/components/ChapterContent';
 import { useState, useEffect } from 'react';
 import { ChapterProgressDetail, Chapter, ChapterMaterial, ChapterTask, MCQ, PengayaanAnswer } from '@/lib/types';
 import MCQResult from '@/components/MCQResult';
+import FileUpload, { UploadNotAvailableModal } from '@/components/FileUpload';
 
 function SectionCard({ step, title, description, done, unlocked, children }: {
   step: number; title: string; description: string; done: boolean; unlocked: boolean; children?: React.ReactNode;
@@ -119,6 +120,7 @@ export default function ChapterClient() {
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [dataLoaded, setDataLoaded] = useState(false);
+  const [showUploadModal, setShowUploadModal] = useState(false);
 
   // ── Init edit state from DB data ──
   /* eslint-disable react-hooks/set-state-in-effect */
@@ -404,6 +406,7 @@ export default function ChapterClient() {
   // ═══════════════════════════════════════════
   if (teacherMode) {
     return (
+      <>
       <div className="max-w-2xl mx-auto space-y-5 pb-8">
         <div className="flex items-center justify-between">
           <Link href="/materi" className="inline-flex items-center gap-1.5 text-sm text-[#5C7A6E] hover:text-[#1F3D30]">
@@ -489,7 +492,7 @@ export default function ChapterClient() {
                     className="text-xs text-red-500 hover:text-red-700 font-semibold">🗑️ Hapus</button>
                 </div>
                 <div className="flex gap-2 mb-2">
-                  {['text', 'image', 'video', 'embed'].map(t => (
+                  {['text', 'image', 'video', 'embed', 'file'].map(t => (
                     <button key={t} onClick={() => updateMaterial(i, { type: t as ChapterMaterial['type'] })}
                       className={`px-2 py-1 text-[10px] font-semibold rounded-lg border transition-colors ${
                         mat.type === t ? 'bg-[#1F3D30] text-white border-[#1F3D30]' : 'bg-white text-[#5C7A6E] border-[#d4dcd0]'
@@ -501,8 +504,17 @@ export default function ChapterClient() {
                     rows={3} className="w-full px-3 py-2 text-sm border border-[#d4dcd0] rounded-lg resize-none"
                     placeholder="Markdown content..." />
                 ) : (
-                  <input value={mat.content} onChange={e => updateMaterial(i, { content: e.target.value })}
-                    className="w-full px-3 py-2 text-sm border border-[#d4dcd0] rounded-lg" placeholder="URL..." />
+                  <div className="space-y-2">
+                    <input value={mat.content} onChange={e => updateMaterial(i, { content: e.target.value })}
+                      className="w-full px-3 py-2 text-sm border border-[#d4dcd0] rounded-lg" placeholder="URL..." />
+                    <button onClick={() => setShowUploadModal(true)}
+                      className="text-xs text-[#1F3D30] font-semibold hover:underline flex items-center gap-1">
+                      📎 Upload file (ganti link)
+                    </button>
+                    {mat.fileUrl && (
+                      <p className="text-[10px] text-emerald-700">File: {mat.fileName ?? mat.fileUrl}</p>
+                    )}
+                  </div>
                 )}
                 {mat.type !== 'text' && (
                   <input value={mat.caption ?? ''} onChange={e => updateMaterial(i, { caption: e.target.value || null })}
@@ -539,17 +551,35 @@ export default function ChapterClient() {
                   <input type="date" value={task.dueDate ?? ''} onChange={e => updateTask(ti, { dueDate: e.target.value || null })}
                     className="w-full px-3 py-2 text-sm border border-[#d4dcd0] rounded-lg" />
                 </div>
-                <div className="mt-3 space-y-2">
-                  <span className="text-[10px] font-bold uppercase text-[#5C7A6E] block">Soal Tugas ({task.questions.length})</span>
-                  {task.questions.map((q, qi) => (
-                    <TeacherQuestionItem key={q.id} idx={qi}
-                      question={q}
-                      onChange={(patch) => updateTaskQuestion(ti, qi, patch)}
-                      onRemove={() => removeTaskQuestion(ti, qi)}
-                    />
+                <div className="flex gap-2 mb-2">
+                  {['mcq', 'text', 'file'].map(t => (
+                    <button key={t} onClick={() => updateTask(ti, { type: t as ChapterTask['type'] })}
+                      className={`px-2 py-1 text-[10px] font-semibold rounded-lg border transition-colors ${
+                        task.type === t ? 'bg-[#1F3D30] text-white border-[#1F3D30]' : 'bg-white text-[#5C7A6E] border-[#d4dcd0]'
+                      }`}>
+                      {t === 'mcq' ? '✅ MCQ' : t === 'text' ? '📝 Isian' : '📎 Upload File'}
+                    </button>
                   ))}
-                  <button onClick={() => addTaskQuestion(ti)}
-                    className="text-xs text-[#1F3D30] font-semibold hover:underline">+ Tambah Soal</button>
+                </div>
+                <div className="mt-3 space-y-2">
+                  {task.type === 'mcq' ? (
+                    <>
+                      <span className="text-[10px] font-bold uppercase text-[#5C7A6E] block">Soal Tugas ({task.questions.length})</span>
+                      {task.questions.map((q, qi) => (
+                        <TeacherQuestionItem key={q.id} idx={qi}
+                          question={q}
+                          onChange={(patch) => updateTaskQuestion(ti, qi, patch)}
+                          onRemove={() => removeTaskQuestion(ti, qi)}
+                        />
+                      ))}
+                      <button onClick={() => addTaskQuestion(ti)}
+                        className="text-xs text-[#1F3D30] font-semibold hover:underline">+ Tambah Soal</button>
+                    </>
+                  ) : task.type === 'text' ? (
+                    <p className="text-xs text-[#5C7A6E]">📝 Siswa akan menjawab dalam bentuk teks/paragraf.</p>
+                  ) : (
+                    <p className="text-xs text-[#5C7A6E]">📎 Siswa akan mengupload file sebagai jawaban tugas.</p>
+                  )}
                 </div>
               </div>
             ))}
@@ -612,13 +642,16 @@ export default function ChapterClient() {
           )}
         </div>
       </div>
-    );
+      {showUploadModal && <UploadNotAvailableModal onClose={() => setShowUploadModal(false)} />}
+    </>
+  );
   }
 
   // ═══════════════════════════════════════════
   // STUDENT / VIEW MODE
   // ═══════════════════════════════════════════
   return (
+    <>
     <div className="max-w-2xl mx-auto space-y-5 pb-8">
       <div className="flex items-center justify-between">
         <Link href="/materi" className="inline-flex items-center gap-1.5 text-sm text-[#5C7A6E] hover:text-[#1F3D30]">
@@ -684,9 +717,34 @@ export default function ChapterClient() {
                   {task.dueDate && <p className="text-xs font-medium text-[#C8A84E] mt-1">Deadline: {new Date(task.dueDate).toLocaleDateString('id-ID')}</p>}
                 </div>
                 {teacherView ? (
-                  <p className="text-sm text-[#5C7A6E]">{task.questions.length} soal tugas tersedia.</p>
+                  <p className="text-sm text-[#5C7A6E]">
+                    {task.type === 'mcq' ? `${task.questions.length} soal tugas tersedia.` :
+                     task.type === 'text' ? '📝 Tugas isian teks' :
+                     '📎 Tugas upload file'}
+                  </p>
                 ) : !thisTaskDone ? (
-                  <MCQTest questions={task.questions} type="tugas" onComplete={handleTugasComplete(tIdx)} />
+                  task.type === 'mcq' ? (
+                    <MCQTest questions={task.questions} type="tugas" onComplete={handleTugasComplete(tIdx)} />
+                  ) : task.type === 'text' ? (
+                    <div className="space-y-2">
+                      <textarea
+                        rows={4}
+                        className="w-full px-3 py-2 border border-[#d4dcd0] rounded-xl text-sm resize-none"
+                        placeholder="Tulis jawaban Anda di sini..."
+                      />
+                      <button onClick={() => setShowUploadModal(true)}
+                        className="px-4 py-2 bg-[#1F3D30] text-white rounded-xl text-sm font-semibold disabled:opacity-50">
+                        Kirim Jawaban
+                      </button>
+                    </div>
+                  ) : (
+                    <div>
+                      <button onClick={() => setShowUploadModal(true)}
+                        className="px-4 py-2 bg-[#1F3D30] text-white rounded-xl text-sm font-semibold hover:bg-[#2A5A44] transition-colors">
+                        📎 Upload File Tugas
+                      </button>
+                    </div>
+                  )
                 ) : (
                   <p className="text-sm text-emerald-700 font-medium">✅ Tugas sudah dikerjakan</p>
                 )}
@@ -726,6 +784,8 @@ export default function ChapterClient() {
         />
       )}
     </div>
+    {showUploadModal && <UploadNotAvailableModal onClose={() => setShowUploadModal(false)} />}
+  </>
   );
 }
 
@@ -819,6 +879,7 @@ function PengayaanSection({ step, chapterId, postTestOptional, unlocked, user, d
   const submitted = !!myAnswer || submittedLocally;
   const [link, setLink] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [showPengayaanUploadModal, setShowPengayaanUploadModal] = useState(false);
 
   const handleSubmit = async () => {
     if (!user || !link || submitting) return;
@@ -839,12 +900,22 @@ function PengayaanSection({ step, chapterId, postTestOptional, unlocked, user, d
         {teacherView ? (
           <p className="text-sm text-[#5C7A6E]">{postTestOptional.answer?.length ?? 0} submission pengayaan tercatat.</p>
         ) : !submitted ? (
-          <div className="flex gap-2">
-            <input type="url" placeholder="Link Google Drive / YouTube" value={link}
-              onChange={e => setLink(e.target.value)}
-              className="flex-1 px-3 py-2 border border-[#d4dcd0] rounded-xl text-sm" />
-            <button onClick={handleSubmit} disabled={!link || submitting}
-              className="px-4 py-2 bg-[#C8A84E] text-white rounded-xl text-sm font-semibold disabled:opacity-50">{submitting ? '⏳...' : 'Submit'}</button>
+          <div className="space-y-2">
+            <div className="flex gap-2">
+              <input type="url" placeholder="Link Google Drive / YouTube" value={link}
+                onChange={e => setLink(e.target.value)}
+                className="flex-1 px-3 py-2 border border-[#d4dcd0] rounded-xl text-sm" />
+              <button onClick={handleSubmit} disabled={!link || submitting}
+                className="px-4 py-2 bg-[#C8A84E] text-white rounded-xl text-sm font-semibold disabled:opacity-50">{submitting ? '⏳...' : 'Submit'}</button>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-[#8A9E95] uppercase font-semibold">Atau</span>
+              <div className="flex-1 h-px bg-[#d4dcd0]" />
+            </div>
+            <button onClick={() => setShowPengayaanUploadModal(true)}
+              className="w-full py-2.5 bg-[#FBF8F4] border border-dashed border-[#1F3D30]/20 rounded-xl text-sm text-[#5C7A6E] font-semibold hover:bg-[#f2f4f0] transition-colors">
+              📎 Upload File
+            </button>
           </div>
         ) : (
           <div>
@@ -856,6 +927,7 @@ function PengayaanSection({ step, chapterId, postTestOptional, unlocked, user, d
           </div>
         )}
       </div>
+      {showPengayaanUploadModal && <UploadNotAvailableModal onClose={() => setShowPengayaanUploadModal(false)} />}
     </SectionCard>
   );
 }

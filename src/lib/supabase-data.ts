@@ -34,6 +34,9 @@ type TaskSubmissionRow = {
   answers: unknown;
   score: number | null;
   submitted_at: string;
+  file_url: string | null;
+  file_name: string | null;
+  file_size: number | null;
 };
 
 type PengayaanSubmissionRow = {
@@ -42,6 +45,9 @@ type PengayaanSubmissionRow = {
   user_name: string | null;
   link: string;
   submitted_at: string;
+  file_url: string | null;
+  file_name: string | null;
+  file_size: number | null;
 };
 
 // Raw PostgREST response types (snake_case — API contract)
@@ -65,6 +71,7 @@ type RawChapterTask = {
   description: string | null;
   due_date: string | null;
   task_order: number;
+  submission_type: string | null;
   [key: string]: unknown;
 };
 
@@ -200,7 +207,7 @@ export function useChapters(refreshKey: number | string = 0, classId?: string | 
               title: task.title,
               description: task.description ?? '',
               dueDate: task.due_date,
-              type: 'mcq' as const,
+              type: (task.submission_type ?? 'mcq') as 'mcq' | 'text' | 'file',
               questions: questions
                 .filter((q) => q.task_id === task.id && q.assessment === 'tugas')
                 .sort((a, b) => a.question_order - b.question_order)
@@ -213,6 +220,10 @@ export function useChapters(refreshKey: number | string = 0, classId?: string | 
                   answers: typeof submission.answers === 'object' && submission.answers !== null ? submission.answers as Record<string, number> : {},
                   score: submission.score ?? 0,
                   submittedAt: submission.submitted_at,
+                  fileUrl: submission.file_url,
+                  fileName: submission.file_name,
+                  fileSize: submission.file_size,
+                  textAnswer: typeof submission.answers === 'object' && submission.answers !== null && 'text' in (submission.answers as Record<string, unknown>) ? (submission.answers as Record<string, string>).text : null,
                 })),
             }));
 
@@ -246,6 +257,9 @@ export function useChapters(refreshKey: number | string = 0, classId?: string | 
                   userName: submission.user_name ?? '',
                   link: submission.link,
                   submittedAt: submission.submitted_at,
+                  fileUrl: submission.file_url,
+                  fileName: submission.file_name,
+                  fileSize: submission.file_size,
                 })),
             } : null,
           };
@@ -351,6 +365,9 @@ type RawChapterMaterial = {
   type: string;
   content: string;
   caption: string | null;
+  file_url: string | null;
+  file_name: string | null;
+  file_size: number | null;
 };
 
 type RawMaterialProgress = {
@@ -396,6 +413,9 @@ export function useChapterMaterials(chapterId: string | null, refreshKey: number
             type: r.type as ChapterMaterial['type'],
             content: r.content,
             caption: r.caption,
+            fileUrl: r.file_url,
+            fileName: r.file_name,
+            fileSize: r.file_size,
           });
         }
       }
@@ -554,6 +574,8 @@ export async function submitTaskAnswer(
   userName: string,
   answers: Record<string, number>,
   score: number,
+  textAnswer?: string | null,
+  fileInfo?: { fileUrl: string; fileName: string; fileSize: number } | null,
 ): Promise<boolean> {
   try {
     const { data: tasks, error: taskError } = await supabase
@@ -566,9 +588,22 @@ export async function submitTaskAnswer(
     const taskId = tasks?.[taskIndex]?.id;
     if (!taskId) throw new Error(`Task index ${taskIndex} not found for ${chapterId}`);
 
+    const submission: Record<string, unknown> = { task_id: taskId, user_id: userId, user_name: userName, submitted_at: new Date().toISOString() };
+    if (textAnswer) {
+      submission.answers = { text: textAnswer };
+    } else {
+      submission.answers = answers;
+    }
+    submission.score = score;
+    if (fileInfo) {
+      submission.file_url = fileInfo.fileUrl;
+      submission.file_name = fileInfo.fileName;
+      submission.file_size = fileInfo.fileSize;
+    }
+
     const { error } = await supabase
       .from('task_submissions')
-      .upsert({ task_id: taskId, user_id: userId, user_name: userName, answers, score, submitted_at: new Date().toISOString() }, { onConflict: 'task_id,user_id' });
+      .upsert(submission, { onConflict: 'task_id,user_id' });
 
     if (error) throw error;
 
@@ -587,11 +622,18 @@ export async function submitPengayaanLink(
   userId: string,
   userName: string,
   link: string,
+  fileInfo?: { fileUrl: string; fileName: string; fileSize: number } | null,
 ): Promise<boolean> {
   try {
+    const submission: Record<string, unknown> = { chapter_id: chapterId, user_id: userId, user_name: userName, link, submitted_at: new Date().toISOString() };
+    if (fileInfo) {
+      submission.file_url = fileInfo.fileUrl;
+      submission.file_name = fileInfo.fileName;
+      submission.file_size = fileInfo.fileSize;
+    }
     const { error } = await supabase
       .from('pengayaan_submissions')
-      .upsert({ chapter_id: chapterId, user_id: userId, user_name: userName, link, submitted_at: new Date().toISOString() }, { onConflict: 'chapter_id,user_id' });
+      .upsert(submission, { onConflict: 'chapter_id,user_id' });
 
     if (error) throw error;
     return true;
