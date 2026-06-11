@@ -3,7 +3,7 @@
 import { useAuth } from '@/lib/AuthContext';
 import {
   useAllUsers, adminCreateUser, adminUpdateUser,
-  adminDeleteUser, adminResetPassword,
+  adminDeleteUser, adminResetPassword, adminSetPassword,
 } from '@/lib/supabase-data';
 import { useState, useMemo } from 'react';
 
@@ -140,6 +140,7 @@ export default function AdminUsersPage() {
   const [deleteUser, setDeleteUser] = useState<typeof users[0] | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [resetTarget, setResetTarget] = useState<typeof users[0] | null>(null);
+  const [newPassword, setNewPassword] = useState('');
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
   const [passwordBanner, setPasswordBanner] = useState<string | null>(null);
 
@@ -222,6 +223,23 @@ export default function AdminUsersPage() {
       setResetTarget(null);
       setPasswordBanner(result.password!);
       showToast(`✅ Password ${resetTarget.username} berhasil direset!`, true);
+    } else {
+      showToast(result.message, false);
+    }
+  };
+
+  const handleSetPassword = async () => {
+    if (!resetTarget) return;
+    if (!newPassword.trim()) {
+      showToast('⚠️ Password tidak boleh kosong.', false);
+      return;
+    }
+    const result = await adminSetPassword(resetTarget.id, newPassword.trim());
+    if (result.ok) {
+      setPasswordBanner(newPassword.trim());
+      setNewPassword('');
+      setResetTarget(null);
+      showToast(`✅ Password ${resetTarget.username} berhasil diubah!`, true);
     } else {
       showToast(result.message, false);
     }
@@ -449,19 +467,47 @@ export default function AdminUsersPage() {
         )}
       </Modal>
 
-      {/* Reset password modal */}
-      <Modal open={!!resetTarget} onClose={() => setResetTarget(null)} title="🔄 Reset Password">
+      {/* Ganti password modal */}
+      <Modal open={!!resetTarget} onClose={() => { setResetTarget(null); setNewPassword(''); }} title="🔑 Ganti Password">
         {resetTarget && (
           <div className="space-y-4">
             <p className="text-sm text-[#1F3D30]">
-              Yakin reset password <strong>{resetTarget.username}</strong>?
+              Ganti password untuk <strong>{resetTarget.username}</strong>
             </p>
-            <p className="text-xs text-[#5C7A6E]">
-              Password akan menjadi: <strong className="font-mono text-[#1F3D30]">pasraman-{resetTarget.username}</strong>
-            </p>
+            <div>
+              <label className="block text-xs font-semibold text-[#5C7A6E] mb-1.5">Password Baru</label>
+              <input
+                type="text"
+                value={newPassword}
+                onChange={e => setNewPassword(e.target.value)}
+                placeholder="Masukkan password baru"
+                className="w-full px-4 py-3 rounded-xl border border-[#D4CFC7] text-sm focus:outline-none focus:ring-2 focus:ring-[#1F3D30]/20"
+                autoFocus
+                onKeyDown={e => { if (e.key === 'Enter') handleSetPassword(); }}
+              />
+            </div>
             <div className="flex gap-3">
-              <button onClick={() => setResetTarget(null)} className="flex-1 py-3 bg-[#FBF8F4] text-[#1F3D30] rounded-xl text-sm font-semibold hover:bg-[#F0EAE2]">Batal</button>
-              <button onClick={handleReset} className="flex-1 py-3 bg-amber-600 text-white rounded-xl text-sm font-semibold hover:bg-amber-700">Reset Password</button>
+              <button
+                onClick={() => { setResetTarget(null); setNewPassword(''); }}
+                className="flex-1 py-3 bg-[#FBF8F4] text-[#1F3D30] rounded-xl text-sm font-semibold hover:bg-[#F0EAE2]"
+              >
+                Batal
+              </button>
+              <button
+                onClick={handleSetPassword}
+                disabled={!newPassword.trim()}
+                className="flex-1 py-3 bg-[#1F3D30] text-white rounded-xl text-sm font-semibold hover:bg-[#2A4D3E] disabled:opacity-50"
+              >
+                Simpan Password
+              </button>
+            </div>
+            <div className="text-center pt-1">
+              <button
+                onClick={() => { setNewPassword(''); handleReset(); }}
+                className="text-xs text-[#5C7A6E] hover:text-[#C8A84E] underline underline-offset-2"
+              >
+                Reset ke default (pasraman-{resetTarget.username})
+              </button>
             </div>
           </div>
         )}

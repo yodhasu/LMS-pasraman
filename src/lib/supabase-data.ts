@@ -1756,3 +1756,21 @@ export async function adminResetPassword(userId: string): Promise<{ ok: boolean;
     return { ok: false, message: `⚠️ Gagal reset password: ${err.message ?? 'unknown error'}` };
   }
 }
+
+export async function adminSetPassword(userId: string, newPassword: string): Promise<{ ok: boolean; message: string }> {
+  try {
+    if (!newPassword || newPassword.length < 1) {
+      return { ok: false, message: '⚠️ Password tidak boleh kosong.' };
+    }
+    const { data, error } = await supabase.rpc('admin_set_password', {
+      p_user_id: userId,
+      p_new_password: newPassword,
+    });
+    if (error) throw error;
+    const result = data as { ok: boolean; message: string } | null;
+    return result ?? { ok: false, message: '⚠️ Gagal mengubah password.' };
+  } catch (err: any) {
+    console.error('adminSetPassword error:', err);
+    return { ok: false, message: `⚠️ Gagal mengubah password: ${err.message ?? 'unknown error'}` };
+  }
+}

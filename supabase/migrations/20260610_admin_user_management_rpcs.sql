@@ -157,3 +157,31 @@ $$;
 revoke execute on function public.admin_reset_password(uuid) from public;
 revoke execute on function public.admin_reset_password(uuid) from anon;
 grant execute on function public.admin_reset_password(uuid) to authenticated;
+
+-- ── 5. Set user password (admin only) — custom password ──
+create or replace function public.admin_set_password(p_user_id uuid, p_new_password text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare v_username text; v_email text;
+begin
+  if not public.is_admin() then raise exception 'admin only'; end if;
+  if p_new_password is null or length(p_new_password) < 1 then
+    return jsonb_build_object('ok', false, 'message', 'Password tidak boleh kosong');
+  end if;
+
+  select username, email into v_username, v_email from public.app_users where id = p_user_id;
+  if v_username is null then return jsonb_build_object('ok', false, 'message', 'User not found'); end if;
+
+  update public.app_users set password_hash = crypt(p_new_password, gen_salt('bf')), updated_at = now() where id = p_user_id;
+  update auth.users set encrypted_password = crypt(p_new_password, gen_salt('bf')), updated_at = now() where id = p_user_id;
+
+  return jsonb_build_object('ok', true, 'message', format('Password %s berhasil diubah', v_username));
+end;
+$$;
+
+revoke execute on function public.admin_set_password(uuid, text) from public;
+revoke execute on function public.admin_set_password(uuid, text) from anon;
+grant execute on function public.admin_set_password(uuid, text) to authenticated;
