@@ -706,6 +706,21 @@ export default function ChapterClient() {
                         markDirty();
                       }}
                     />
+                    {(() => {
+                      const pending = pendingFiles.find(f => f.matIdx === i);
+                      if (pending) {
+                        const shortName = pending.originalName.length > 40
+                          ? pending.originalName.substring(0, 37) + '...'
+                          : pending.originalName;
+                        return (
+                          <p className="text-[10px] text-amber-700 flex items-center gap-1 mt-1">
+                            <span>⏳</span>
+                            <span title={pending.originalName}>{shortName} — simpan bab untuk publikasi</span>
+                          </p>
+                        );
+                      }
+                      return null;
+                    })()}
                     {mat.fileUrl && (
                       <p className="text-[10px] text-emerald-700">File: {mat.fileName ?? mat.fileUrl}</p>
                     )}
