@@ -1,3 +1,4 @@
+import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 import { uploadToDrive } from '@/lib/google-drive';
 
@@ -48,6 +49,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Determine target folder based on upload type
+    const folderKey = uploadType === 'teacher' ? 'gdrive_guru_folder_id' : 'gdrive_murid_folder_id';
+
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+    const { data: folderSetting } = await supabase
+      .from('app_settings')
+      .select('value')
+      .eq('key', folderKey)
+      .single();
+
+    const folderId = folderSetting?.value || null;
+
     // Convert file to buffer
     const arrayBuffer = await file.arrayBuffer();
     const fileBuffer = Buffer.from(arrayBuffer);
@@ -57,7 +73,7 @@ export async function POST(request: NextRequest) {
       file.name,
       fileBuffer,
       mimeType,
-      null, // no specific folder — uses root
+      folderId, // files go into guru/ or murid/ folder
     );
 
     return NextResponse.json({
