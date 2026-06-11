@@ -171,7 +171,6 @@ export default function ChapterClient() {
     if (!user || !chapter) return;
     const submitted = await submitTaskAnswer(chapterId, taskIdx, user.uid, displayName, answers, score);
     if (!submitted) return; // submission failed — don't mark as completed
-    await saveScore(user.uid, chapterId, 'tugas', score);
     // Mark this task as completed locally so multi-task chapters don't block
     const nextCompleted = { ...completedTasks, [taskIdx]: true };
     setCompletedTasks(nextCompleted);
@@ -819,12 +818,15 @@ function PengayaanSection({ step, chapterId, postTestOptional, unlocked, user, d
   const [submittedLocally, setSubmittedLocally] = useState(false);
   const submitted = !!myAnswer || submittedLocally;
   const [link, setLink] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   const handleSubmit = async () => {
-    if (!user || !link) return;
+    if (!user || !link || submitting) return;
+    setSubmitting(true);
     await submitPengayaanLink(chapterId, user.uid, displayName, link);
     setSubmittedLocally(true);
     setLink('');
+    setSubmitting(false);
   };
 
   return (
@@ -841,8 +843,8 @@ function PengayaanSection({ step, chapterId, postTestOptional, unlocked, user, d
             <input type="url" placeholder="Link Google Drive / YouTube" value={link}
               onChange={e => setLink(e.target.value)}
               className="flex-1 px-3 py-2 border border-[#d4dcd0] rounded-xl text-sm" />
-            <button onClick={handleSubmit} disabled={!link}
-              className="px-4 py-2 bg-[#C8A84E] text-white rounded-xl text-sm font-semibold disabled:opacity-50">Submit</button>
+            <button onClick={handleSubmit} disabled={!link || submitting}
+              className="px-4 py-2 bg-[#C8A84E] text-white rounded-xl text-sm font-semibold disabled:opacity-50">{submitting ? '⏳...' : 'Submit'}</button>
           </div>
         ) : (
           <div>

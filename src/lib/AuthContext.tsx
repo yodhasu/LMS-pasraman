@@ -107,12 +107,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const supabaseUser = data.session?.user ?? null;
       if (!active) return;
       setUser(normalizeUser(supabaseUser));
-      // Don't await ensureAppUser — it's a REST call that can be slow
-      // when supabase-js auto-refreshes an expired token on mobile.
-      // setLoading(false) must fire immediately so the UI isn't stuck
-      // on a loading spinner while auth-dependent queries resolve.
       if (supabaseUser) {
-        ensureAppUser(supabaseUser).then(r => { if (active) { setRole(r.role); setClassId(r.classId); } });
+        const appInfo = await ensureAppUser(supabaseUser);
+        if (!active) return;
+        setRole(appInfo.role);
+        setClassId(appInfo.classId);
       } else {
         setRole(null);
         setClassId(null);

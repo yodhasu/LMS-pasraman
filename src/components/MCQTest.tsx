@@ -12,9 +12,11 @@ export default function MCQTest({ questions, type = 'post', onComplete }: Props)
   const [answers, setAnswers] = useState<Record<string, number>>({});
   const [submitted, setSubmitted] = useState(false);
   const [score, setScore] = useState<number | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   const handleSubmit = () => {
-    if (questions.length === 0) return;
+    if (questions.length === 0 || submitting) return;
+    setSubmitting(true);
     let correct = 0;
     questions.forEach(q => {
       if (answers[q.id] === q.correctIndex) correct++;
@@ -128,14 +130,14 @@ export default function MCQTest({ questions, type = 'post', onComplete }: Props)
       ))}
       <button
         onClick={handleSubmit}
-        disabled={!allAnswered}
+        disabled={!allAnswered || submitting}
         className={`w-full py-3 rounded-xl font-semibold text-sm transition-all ${
-          allAnswered
+          allAnswered && !submitting
             ? 'bg-[#1F3D30] text-white hover:bg-[#2A5A44]'
             : 'bg-[#1F3D30]/10 text-[#5C7A6E] cursor-not-allowed'
         }`}
       >
-        {allAnswered ? 'Kumpulkan Jawaban' : `Jawab semua soal (${Object.keys(answers).length}/${questions.length})`}
+        {submitting ? '⏳ Mengirim...' : allAnswered ? 'Kumpulkan Jawaban' : `Jawab semua soal (${Object.keys(answers).length}/${questions.length})`}
       </button>
     </div>
   );

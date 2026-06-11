@@ -328,13 +328,6 @@ export function useStudentProgress(classId?: string | null) {
   useEffect(() => {
     let cancelled = false;
 
-    supabase.auth.getUser().then(({ data }) => {
-      if (cancelled) return;
-      const normalized = normalizeUser(data.user ?? null);
-      setUser(normalized);
-      if (normalized) load(normalized.id);
-    });
-
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       const normalized = normalizeUser(session?.user ?? null);
       setUser(normalized);
@@ -418,10 +411,6 @@ export function useChapterMaterials(chapterId: string | null, refreshKey: number
       setLoading(false);
     }
 
-    supabase.auth.getUser().then(({ data }) => {
-      if (!cancelled) load(data.user?.id ?? null);
-    });
-
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!cancelled) load(session?.user?.id ?? null);
     });
@@ -482,13 +471,6 @@ export function useNilai() {
       if (!cancelled) setScores(mapped);
     }
 
-    supabase.auth.getUser().then(({ data }) => {
-      if (cancelled) return;
-      const normalized = normalizeUser(data.user ?? null);
-      setUser(normalized);
-      if (normalized) load(normalized.id);
-    });
-
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       const normalized = normalizeUser(session?.user ?? null);
       setUser(normalized);
@@ -511,9 +493,32 @@ export async function markChapterStep(
   step: 'pretest' | 'materi' | 'tugas' | 'posttest',
 ): Promise<boolean> {
   try {
+    // Read existing row first so we don't clobber other step fields
+    const { data: existing } = await supabase
+      .from('chapter_progress')
+      .select('pretest, materi, tugas, posttest')
+      .eq('user_id', userId)
+      .eq('chapter_id', chapterId)
+      .maybeSingle();
+
+    const merged = {
+      user_id: userId,
+      chapter_id: chapterId,
+      pretest: existing?.pretest ?? false,
+      materi: existing?.materi ?? false,
+      tugas: existing?.tugas ?? false,
+      posttest: existing?.posttest ?? false,
+      [step]: true,
+      // Auto-compute `complete` when all 4 steps are done
+      complete: ((existing?.pretest ?? false) || step === 'pretest')
+           && ((existing?.materi ?? false) || step === 'materi')
+           && ((existing?.tugas ?? false) || step === 'tugas')
+           && ((existing?.posttest ?? false) || step === 'posttest'),
+    };
+
     const { error } = await supabase
       .from('chapter_progress')
-      .upsert({ user_id: userId, chapter_id: chapterId, [step]: true }, { onConflict: 'user_id,chapter_id' });
+      .upsert(merged, { onConflict: 'user_id,chapter_id' });
 
     if (error) throw error;
     return true;
