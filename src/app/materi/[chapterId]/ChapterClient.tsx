@@ -359,7 +359,12 @@ export default function ChapterClient() {
     setSaveMsg('Menyimpan perubahan...');
 
     try {
-      // Step 1: Finalize any pending files
+      // Build materials array for save — with finalized file URLs merged in
+      let materialsForSave: Array<{
+        id?: string; section_order: number; type: string; content: string;
+        caption: string | null; fileUrl?: string | null; fileName?: string | null; fileSize?: number | null;
+      }> = [];
+
       if (pendingFiles.length > 0) {
         setSaveMsg(`Finalisasi ${pendingFiles.length} file...`);
         const finalRes = await fetch('/api/upload/finalize-batch', {
@@ -379,33 +384,49 @@ export default function ChapterClient() {
           throw new Error(finalData.message || 'Gagal finalisasi file.');
         }
 
-        // Map finalized results back to materials
+        // Map finalization results into materials
+        const fileUrlMap = new Map<string, { fileUrl: string; fileName: string; fileSize: number }>();
         if (finalData.results) {
-          setEditMaterials(prev => {
-            const updated = [...prev];
-            finalData.results.forEach((r: { fileId: string; success: boolean; fileUrl?: string; fileName?: string; fileSize?: number }) => {
-              if (!r.success) return;
-              // Find the pending entry for this fileId
-              const pending = pendingFiles.find(p => p.fileId === r.fileId);
-              if (pending !== undefined && pending.matIdx >= 0 && pending.matIdx < updated.length) {
-                updated[pending.matIdx] = {
-                  ...updated[pending.matIdx],
-                  content: r.fileUrl || '',
-                  fileUrl: r.fileUrl || '',
-                  fileName: r.fileName || '',
-                  fileSize: r.fileSize || 0,
-                };
-              }
-            });
-            return updated;
-          });
+          for (const r of finalData.results as Array<{ fileId: string; success: boolean; fileUrl?: string; fileName?: string; fileSize?: number }>) {
+            if (r.success) {
+              fileUrlMap.set(r.fileId, {
+                fileUrl: r.fileUrl || '',
+                fileName: r.fileName || '',
+                fileSize: r.fileSize || 0,
+              });
+            }
+          }
         }
+
+        materialsForSave = editMaterials.map((m, i) => {
+          const pending = pendingFiles.find(p => p.matIdx === i);
+          const finalInfo = pending?.fileId ? fileUrlMap.get(pending.fileId) : null;
+          return {
+            id: m.id,
+            section_order: m.sectionOrder ?? i,
+            type: m.type,
+            content: finalInfo?.fileUrl || m.content,
+            caption: m.caption,
+            fileUrl: finalInfo?.fileUrl || m.fileUrl,
+            fileName: finalInfo?.fileName || m.fileName,
+            fileSize: finalInfo?.fileSize || m.fileSize,
+          };
+        });
+      } else {
+        materialsForSave = editMaterials.map((m, i) => ({
+          id: m.id,
+          section_order: m.sectionOrder ?? i,
+          type: m.type,
+          content: m.content,
+          caption: m.caption,
+          fileUrl: m.fileUrl,
+          fileName: m.fileName,
+          fileSize: m.fileSize,
+        }));
       }
 
-      // Step 2: Save chapter to DB (use latest materials state)
-      // Read materials directly from state instead of stale closure
-      const currentMaterials = editMaterials;
-
+      // Step 2: Save chapter to DB — use materialsForSave which has the
+      // finalized file URLs embedded synchronously (not from async state)
       const result = await saveChapterBatch(chapterId, {
         metadata: {
           title: editTitle,
@@ -415,16 +436,7 @@ export default function ChapterClient() {
           cover_color: editCoverColor,
         },
         pengayaan: { instruction: editPengayaanText, enabled: editPengayaanEnabled },
-        materials: currentMaterials.map((m, i) => ({
-          id: m.id,
-          section_order: m.sectionOrder ?? i,
-          type: m.type,
-          content: m.content,
-          caption: m.caption,
-          fileUrl: m.fileUrl,
-          fileName: m.fileName,
-          fileSize: m.fileSize,
-        })),
+        materials: materialsForSave,
         tasks: editTasks.map((t, i) => ({
           id: t.id,
           title: t.title,
@@ -458,6 +470,18 @@ export default function ChapterClient() {
 
       setSaving(false);
       if (result.ok) {
+        // Update local state to reflect finalized file URLs
+        setEditMaterials(materialsForSave.map(m => ({
+          id: m.id || '',
+          chapterId,
+          sectionOrder: m.section_order,
+          type: m.type as ChapterMaterial['type'],
+          content: m.content,
+          caption: m.caption,
+          fileUrl: m.fileUrl || null,
+          fileName: m.fileName || null,
+          fileSize: m.fileSize || null,
+        } as ChapterMaterial)));
         setPendingFiles([]);
         setIsDirty(false);
         setSaveMsg('✅ Bab berhasil disimpan');
