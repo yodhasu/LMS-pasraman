@@ -2,10 +2,25 @@
 
 import { ChapterMaterial } from '@/lib/types';
 import ReactMarkdown from 'react-markdown';
-import YouTubeEmbed from './YouTubeEmbed';
+import VideoPlayer from './VideoPlayer';
 import MediaViewer from './MediaViewer';
 import { useState } from 'react';
 
+// ── URL helpers ──
+function isValidUrl(str: string): boolean {
+  if (!str || typeof str !== 'string') return false;
+  // Must start with http://, https://, or // (protocol-relative)
+  return /^https?:\/\//i.test(str) || str.startsWith('//');
+}
+
+function ensureUrl(str: string): string {
+  if (!str) return '#';
+  if (str.startsWith('//')) return 'https:' + str;
+  if (!/^https?:\/\//i.test(str)) return 'https://' + str;
+  return str;
+}
+
+// ── Material icons and labels ──
 interface Props {
   chapterId?: string;
   materials: ChapterMaterial[];
@@ -272,7 +287,7 @@ export default function ChapterContent({
 
                     {material.type === 'video' && (
                       <div>
-                        <YouTubeEmbed url={material.content} />
+                        <VideoPlayer url={material.content} />
                         {material.caption && (
                           <p className="text-xs text-[#5C7A6E] mt-2">{material.caption}</p>
                         )}
@@ -281,14 +296,20 @@ export default function ChapterContent({
 
                     {material.type === 'embed' && (
                       <div>
-                        <a
-                          href={material.content}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-2 text-sm text-[#1F3D30] font-medium hover:underline"
-                        >
-                          🔗 {material.caption || material.content}
-                        </a>
+                        {isValidUrl(material.content) ? (
+                          <a
+                            href={ensureUrl(material.content)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-2 text-sm text-[#1F3D30] font-medium hover:underline"
+                          >
+                            🔗 {material.caption || material.content}
+                          </a>
+                        ) : (
+                          <span className="text-sm text-[#5C7A6E]">
+                            🔗 {material.caption || 'Referensi tidak tersedia'}
+                          </span>
+                        )}
                       </div>
                     )}
 
@@ -300,20 +321,28 @@ export default function ChapterContent({
                             <p className="text-sm font-medium text-[#1F3D30] truncate">
                               {material.fileName || material.content || 'File'}
                             </p>
-                            {material.fileSize && (
+                            {material.fileSize ? (
                               <p className="text-[10px] text-[#8A9E95]">
                                 {(material.fileSize / 1024 / 1024).toFixed(1)} MB
                               </p>
+                            ) : (
+                              <p className="text-[10px] text-[#8A9E95]">File</p>
                             )}
                           </div>
-                          <a
-                            href={material.fileUrl || material.content}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="px-3 py-1.5 bg-[#1F3D30] text-white rounded-lg text-xs font-semibold hover:bg-[#2A5A44] transition-colors flex-shrink-0"
-                          >
-                            Buka
-                          </a>
+                          {isValidUrl(material.fileUrl || material.content) ? (
+                            <a
+                              href={ensureUrl(material.fileUrl || material.content)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-3 py-1.5 bg-[#1F3D30] text-white rounded-lg text-xs font-semibold hover:bg-[#2A5A44] transition-colors flex-shrink-0"
+                            >
+                              Buka
+                            </a>
+                          ) : (
+                            <span className="px-3 py-1.5 bg-gray-200 text-gray-500 rounded-lg text-xs font-semibold flex-shrink-0">
+                              URL tidak valid
+                            </span>
+                          )}
                         </div>
                         {material.caption && (
                           <p className="text-xs text-[#5C7A6E] mt-2">{material.caption}</p>
