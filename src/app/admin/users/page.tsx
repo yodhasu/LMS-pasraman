@@ -363,8 +363,8 @@ export default function AdminUsersPage() {
                         <button
                           onClick={() => setResetTarget(u)}
                           className="p-1.5 rounded-lg hover:bg-[#F0EAE2] text-sm"
-                          title="Reset Password"
-                        >🔄</button>
+                          title="Ganti Password"
+                        >🔑</button>
                         <button
                           onClick={() => setDeleteUser(u)}
                           className="p-1.5 rounded-lg hover:bg-red-50 text-sm"
@@ -393,7 +393,7 @@ export default function AdminUsersPage() {
                 </div>
                 <div className="flex items-center justify-end gap-1">
                     <button onClick={() => setEditUser(u)} className="p-1.5 rounded-lg hover:bg-[#F0EAE2] text-sm">✏️</button>
-                    <button onClick={() => setResetTarget(u)} className="p-1.5 rounded-lg hover:bg-[#F0EAE2] text-sm">🔄</button>
+                    <button onClick={() => setResetTarget(u)} className="p-1.5 rounded-lg hover:bg-[#F0EAE2] text-sm">🔑</button>
                     <button onClick={() => setDeleteUser(u)} className="p-1.5 rounded-lg hover:bg-red-50 text-sm">🗑️</button>
                   </div>
                 </div>
