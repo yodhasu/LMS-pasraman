@@ -21,6 +21,7 @@ interface Props {
 }
 
 const DEFAULT_ACCEPT = '.pdf,.jpg,.jpeg,.png,.webp,.gif,.mp4,.webm,.doc,.docx,.ppt,.pptx,.txt,.csv,.zip,.rar';
+const CHUNK_SIZE = 4 * 1024 * 1024; // 4MB per chunk (Vercel Hobby limit)
 
 export default function FileUpload({
   maxSize = 50 * 1024 * 1024,
@@ -36,14 +37,16 @@ export default function FileUpload({
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [phase, setPhase] = useState('');
 
   const uploadFile = async (file: File) => {
     setError(null);
     setUploading(true);
-    setProgress(5);
+    setProgress(0);
+    setPhase('Menyiapkan...');
 
     try {
-      // Step 1: Initiate resumable upload session
+      // Step 1: Init resumable upload session
       const initRes = await fetch('/api/upload/init', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -69,31 +72,69 @@ export default function FileUpload({
       }
 
       const { uploadUrl } = initData;
-      setProgress(20);
+      setProgress(5);
 
-      // Step 2: Upload file directly to Google Drive (bypasses our server!)
-      const uploadRes = await fetch(uploadUrl, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': file.type || 'application/octet-stream',
-          'Content-Length': String(file.size),
-        },
-        body: file,
-      });
+      // Step 2: Upload in chunks via our server (bypasses CORS + Vercel size limit)
+      const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+      let lastFileId: string | null = null;
 
-      if (!uploadRes.ok) {
-        const errText = await uploadRes.text().catch(() => 'Unknown error');
-        throw new Error(`Upload ke Drive gagal (${uploadRes.status}): ${errText}`);
+      for (let i = 0; i < totalChunks; i++) {
+        const start = i * CHUNK_SIZE;
+        const end = Math.min(start + CHUNK_SIZE, file.size) - 1;
+        const isLast = i === totalChunks - 1;
+        const chunk = file.slice(start, end + 1);
+
+        setPhase(`Mengupload potongan ${i + 1} dari ${totalChunks}...`);
+        setProgress(5 + Math.round(((i) / totalChunks) * 70));
+
+        const chunkForm = new FormData();
+        chunkForm.append('uploadUrl', uploadUrl);
+        chunkForm.append('chunk', chunk);
+        chunkForm.append('start', String(start));
+        chunkForm.append('end', String(end));
+        chunkForm.append('total', String(file.size));
+        chunkForm.append('isLast', isLast ? 'true' : 'false');
+
+        const chunkRes = await fetch('/api/upload/chunk', {
+          method: 'POST',
+          body: chunkForm,
+        });
+
+        const chunkData = await chunkRes.json();
+        if (!chunkRes.ok) throw new Error(chunkData.message || `Gagal upload potongan ${i + 1}`);
+
+        if (chunkData.done && chunkData.fileId) {
+          lastFileId = chunkData.fileId;
+        }
       }
 
       setProgress(80);
+      setPhase('Finalisasi...');
 
-      // Get file ID from response
-      const uploadedFile = await uploadRes.json();
-      const fileId = uploadedFile.id || uploadedFile.fileId;
-      if (!fileId) throw new Error('Upload berhasil tapi file ID tidak diketahui.');
+      // Step 3: Determine fileId from last chunk response or query Drive
+      let fileId = lastFileId;
 
-      // Step 3: Finalize — set permissions and get public URL
+      if (!fileId) {
+        // If we didn't get fileId from chunks, try getting it from the upload session
+        // Google's resumable upload final response includes the file ID
+        setPhase('Mendapatkan informasi file...');
+
+        // Send a GET with upload URL to query status
+        const statusRes = await fetch(uploadUrl, {
+          method: 'PUT',
+          headers: { 'Content-Range': 'bytes */0' },
+        });
+
+        if (statusRes.ok || statusRes.status === 200) {
+          const data = await statusRes.json().catch(() => null);
+          fileId = data?.id || null;
+        }
+      }
+
+      if (!fileId) throw new Error('File ID tidak diketahui setelah upload.');
+
+      // Step 4: Finalize — set permissions & get public URL
+      setPhase('Mengatur akses file...');
       const finalRes = await fetch('/api/upload/finalize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -104,6 +145,7 @@ export default function FileUpload({
       if (!finalRes.ok) throw new Error(finalData.message || 'Gagal finalisasi upload.');
 
       setProgress(100);
+      setPhase('✅ Selesai!');
 
       onUploadSuccess({
         fileUrl: finalData.data.fileUrl,
@@ -117,7 +159,7 @@ export default function FileUpload({
       if (onUploadError) onUploadError(message);
     } finally {
       setUploading(false);
-      setTimeout(() => setProgress(0), 2000);
+      setTimeout(() => { setProgress(0); setPhase(''); }, 3000);
     }
   };
 
@@ -169,11 +211,7 @@ export default function FileUpload({
 
         {uploading ? (
           <div className="space-y-2">
-            <div className="text-sm text-[#5C7A6E]">
-              {progress < 20 ? '⏳ Menyiapkan upload...' :
-               progress < 80 ? '📤 Mengupload ke Drive...' :
-               '🔧 Menyelesaikan...'}
-            </div>
+            <div className="text-xs text-[#5C7A6E]">{phase}</div>
             <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
               <div
                 className="h-full bg-[#1F3D30] rounded-full transition-all duration-300"
@@ -190,14 +228,13 @@ export default function FileUpload({
                 <br />
                 <span className="text-[11px]">
                   Maks {(maxSize / 1024 / 1024).toFixed(0)}MB
-                  {accept !== '*' && ` — ${accept.split(',').slice(0, 4).join(', ')}${accept.split(',').length > 4 ? '...' : ''}`}
+                  {accept !== '*' && ` — ${accept.split(',').slice(0, 3).join(', ')}${accept.split(',').length > 3 ? '...' : ''}`}
                 </span>
               </>
             )}
           </div>
         )}
 
-        {/* Upload type badge */}
         {!uploading && (
           <div className="mt-2 text-[10px] text-[#8A9E95]">
             {uploadType === 'teacher' ? '👨‍🏫 Upload sebagai Guru' : '🎒 Upload sebagai Murid'}
