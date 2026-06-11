@@ -111,6 +111,19 @@ export default function ChapterClient() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [dataLoaded, setDataLoaded] = useState(false);
 
+  // ── Deferred upload state ──
+  // Files uploaded but not yet finalized (pending permission + rename)
+  const [pendingFiles, setPendingFiles] = useState<Array<{
+    fileId: string;
+    originalName: string;
+    tag: string;
+    matIdx: number;
+  }>>([]);
+  const [isDirty, setIsDirty] = useState(false);
+  const [showUnsavedModal, setShowUnsavedModal] = useState(false);
+  const [pendingNavigation, setPendingNavigation] = useState<string | null>(null);
+  const [cleaningUp, setCleaningUp] = useState(false);
+
   // ── Init edit state from DB data ──
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
@@ -190,14 +203,19 @@ export default function ChapterClient() {
     setEditMaterials(prev => [...prev, {
       id: freshId(), chapterId, sectionOrder: prev.length, type: 'text', content: '', caption: null, _tmp: true,
     } as ChapterMaterial & { _tmp?: boolean }]);
+    markDirty();
   };
 
   const updateMaterial = (idx: number, patch: Partial<ChapterMaterial>) => {
     setEditMaterials(prev => prev.map((m, i) => i === idx ? { ...m, ...patch } : m));
+    markDirty();
   };
 
   const removeMaterial = (idx: number) => {
     setEditMaterials(prev => prev.filter((_, i) => i !== idx));
+    // Remove any pending files for this material index
+    setPendingFiles(prev => prev.filter(f => f.matIdx !== idx));
+    markDirty();
   };
 
   // ── Teacher: Question editors (pretest/posttest) ──
@@ -205,6 +223,7 @@ export default function ChapterClient() {
     setter(prev => [...prev, {
       id: freshId(), question: '', options: ['', '', '', ''], correctIndex: 0, _tmp: true,
     }]);
+    markDirty();
   };
 
   const updateQuestion = (
@@ -212,6 +231,7 @@ export default function ChapterClient() {
     idx: number, patch: Partial<MCQ>,
   ) => {
     setter(prev => prev.map((q, i) => i === idx ? { ...q, ...patch } : q));
+    markDirty();
   };
 
   const removeQuestion = (
@@ -219,6 +239,7 @@ export default function ChapterClient() {
     idx: number,
   ) => {
     setter(prev => prev.filter((_, i) => i !== idx));
+    markDirty();
   };
 
   // ── Teacher: Task editors ──
@@ -226,93 +247,241 @@ export default function ChapterClient() {
     setEditTasks(prev => [...prev, {
       id: freshId(), title: '', description: '', dueDate: null, type: 'mcq', questions: [], answer: [],
     }]);
+    markDirty();
   };
 
   const updateTask = (idx: number, patch: Partial<ChapterTask>) => {
     setEditTasks(prev => prev.map((t, i) => i === idx ? { ...t, ...patch } as ChapterTask : t));
+    markDirty();
   };
 
   const removeTask = (idx: number) => {
     setEditTasks(prev => prev.filter((_, i) => i !== idx));
+    markDirty();
   };
 
   const addTaskQuestion = (taskIdx: number) => {
     setEditTasks(prev => prev.map((t, i) => i === taskIdx ? {
       ...t, questions: [...t.questions, { id: freshId(), question: '', options: ['', '', '', ''], correctIndex: 0 }],
     } as ChapterTask : t));
+    markDirty();
   };
 
   const updateTaskQuestion = (taskIdx: number, qIdx: number, patch: Partial<MCQ>) => {
     setEditTasks(prev => prev.map((t, i) => i === taskIdx ? {
       ...t, questions: t.questions.map((q, j) => j === qIdx ? { ...q, ...patch } : q),
     } as ChapterTask : t));
+    markDirty();
   };
 
   const removeTaskQuestion = (taskIdx: number, qIdx: number) => {
     setEditTasks(prev => prev.map((t, i) => i === taskIdx ? {
       ...t, questions: t.questions.filter((_, j) => j !== qIdx),
     } as ChapterTask : t));
+    markDirty();
   };
 
-  // ── Save batch ──
+  // ── Mark dirty on any change ──
+  const markDirty = () => { if (!isDirty) setIsDirty(true); };
+
+  // ── Cancel edit — cleanup pending files ──
+  const handleCancelEdit = async () => {
+    if (pendingFiles.length === 0) {
+      router.push('/materi');
+      return;
+    }
+    setCleaningUp(true);
+    setSaveMsg('Membersihkan file yang belum disimpan...');
+    try {
+      await fetch('/api/upload/cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileIds: pendingFiles.map(f => f.fileId) }),
+      });
+    } catch {
+      // Non-critical — ignore cleanup errors
+    }
+    setCleaningUp(false);
+    // Also clean up any file URLs that were set on materials from this session
+    // by reloading the chapter data from DB
+    router.push('/materi');
+  };
+
+  // ── Navigation intercept ──
+  useEffect(() => {
+    if (!teacherMode) return;
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isDirty) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [isDirty, teacherMode]);
+
+  // Note: App Router doesn't expose router.events.
+  // Internal navigation (back button, links) is handled by:
+  // - The "Kembali" button calling handleCancelEdit
+  // - window.addEventListener('popstate') for browser back
+  // - window.addEventListener('beforeunload') for tab close/refresh
+  useEffect(() => {
+    if (!teacherMode) return;
+    const handlePopState = () => {
+      if (isDirty) {
+        setPendingNavigation(window.location.href);
+        setShowUnsavedModal(true);
+        // Push back to current page to prevent navigation
+        window.history.pushState(null, '', window.location.href);
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [isDirty, teacherMode]);
+
+  const confirmNavigation = async () => {
+    setShowUnsavedModal(false);
+    if (pendingFiles.length > 0) {
+      try {
+        await fetch('/api/upload/cancel', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fileIds: pendingFiles.map(f => f.fileId) }),
+        });
+      } catch {
+        // ignored
+      }
+    }
+    setIsDirty(false);
+    setPendingFiles([]);
+    if (pendingNavigation) {
+      router.push(pendingNavigation);
+    }
+  };
+
+  const dismissNavigation = () => {
+    setShowUnsavedModal(false);
+    setPendingNavigation(null);
+  };
+
+  // ── Save batch — with deferred finalize ──
   const handleSaveAll = async () => {
     setSaving(true);
-    setSaveMsg(null);
+    setSaveMsg('Menyimpan perubahan...');
 
-    const result = await saveChapterBatch(chapterId, {
-      metadata: {
-        title: editTitle,
-        subtitle: editSubtitle,
-        description: editDescription,
-        cover_emoji: editCoverEmoji,
-        cover_color: editCoverColor,
-      },
-      pengayaan: { instruction: editPengayaanText, enabled: editPengayaanEnabled },
-      materials: editMaterials.map((m, i) => ({
-        id: m.id,
-        section_order: m.sectionOrder ?? i,
-        type: m.type,
-        content: m.content,
-        caption: m.caption,
-      })),
-      tasks: editTasks.map((t, i) => ({
-        id: t.id,
-        title: t.title,
-        description: t.description,
-        due_date: t.dueDate,
-        task_order: i,
-        submission_type: t.type,
-        questions: t.questions.map((q, qi) => ({
+    try {
+      // Step 1: Finalize any pending files
+      if (pendingFiles.length > 0) {
+        setSaveMsg(`Finalisasi ${pendingFiles.length} file...`);
+        const finalRes = await fetch('/api/upload/finalize-batch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            files: pendingFiles.map(f => ({
+              fileId: f.fileId,
+              tag: f.tag,
+              originalName: f.originalName,
+            })),
+          }),
+        });
+
+        const finalData = await finalRes.json();
+        if (!finalRes.ok && finalData.results?.length === 0) {
+          throw new Error(finalData.message || 'Gagal finalisasi file.');
+        }
+
+        // Map finalized results back to materials
+        if (finalData.results) {
+          setEditMaterials(prev => {
+            const updated = [...prev];
+            finalData.results.forEach((r: { fileId: string; success: boolean; fileUrl?: string; fileName?: string; fileSize?: number }) => {
+              if (!r.success) return;
+              // Find the pending entry for this fileId
+              const pending = pendingFiles.find(p => p.fileId === r.fileId);
+              if (pending !== undefined && pending.matIdx >= 0 && pending.matIdx < updated.length) {
+                updated[pending.matIdx] = {
+                  ...updated[pending.matIdx],
+                  content: r.fileUrl || '',
+                  fileUrl: r.fileUrl || '',
+                  fileName: r.fileName || '',
+                  fileSize: r.fileSize || 0,
+                };
+              }
+            });
+            return updated;
+          });
+        }
+      }
+
+      // Step 2: Save chapter to DB (use latest materials state)
+      // Read materials directly from state instead of stale closure
+      const currentMaterials = editMaterials;
+
+      const result = await saveChapterBatch(chapterId, {
+        metadata: {
+          title: editTitle,
+          subtitle: editSubtitle,
+          description: editDescription,
+          cover_emoji: editCoverEmoji,
+          cover_color: editCoverColor,
+        },
+        pengayaan: { instruction: editPengayaanText, enabled: editPengayaanEnabled },
+        materials: currentMaterials.map((m, i) => ({
+          id: m.id,
+          section_order: m.sectionOrder ?? i,
+          type: m.type,
+          content: m.content,
+          caption: m.caption,
+          fileUrl: m.fileUrl,
+          fileName: m.fileName,
+          fileSize: m.fileSize,
+        })),
+        tasks: editTasks.map((t, i) => ({
+          id: t.id,
+          title: t.title,
+          description: t.description,
+          due_date: t.dueDate,
+          task_order: i,
+          submission_type: t.type,
+          questions: t.questions.map((q, qi) => ({
+            id: q.id,
+            question_order: qi,
+            question: q.question,
+            options: q.options,
+            correct_index: q.correctIndex,
+          })),
+        })),
+        pretest: editPretestEnabled ? editPretestQuestions.map((q, i) => ({
           id: q.id,
-          question_order: qi,
+          question_order: i,
           question: q.question,
           options: q.options,
           correct_index: q.correctIndex,
-        })),
-      })),
-      pretest: editPretestEnabled ? editPretestQuestions.map((q, i) => ({
-        id: q.id,
-        question_order: i,
-        question: q.question,
-        options: q.options,
-        correct_index: q.correctIndex,
-      })) : [],
-      posttest: editPosttestEnabled ? editPosttestQuestions.map((q, i) => ({
-        id: q.id,
-        question_order: i,
-        question: q.question,
-        options: q.options,
-        correct_index: q.correctIndex,
-      })) : [],
-    });
+        })) : [],
+        posttest: editPosttestEnabled ? editPosttestQuestions.map((q, i) => ({
+          id: q.id,
+          question_order: i,
+          question: q.question,
+          options: q.options,
+          correct_index: q.correctIndex,
+        })) : [],
+      });
 
-    setSaving(false);
-    if (result.ok) {
-      setSaveMsg('✅ Bab berhasil disimpan');
-      setTimeout(() => { setSaveMsg(null); router.push('/materi'); }, 1500);
-    } else {
-      setSaveMsg(result.message || 'Gagal menyimpan perubahan.');
-      setTimeout(() => setSaveMsg(null), 4000);
+      setSaving(false);
+      if (result.ok) {
+        setPendingFiles([]);
+        setIsDirty(false);
+        setSaveMsg('✅ Bab berhasil disimpan');
+        setTimeout(() => { setSaveMsg(null); router.push('/materi'); }, 1500);
+      } else {
+        setSaveMsg(result.message || 'Gagal menyimpan perubahan.');
+        setTimeout(() => setSaveMsg(null), 4000);
+      }
+    } catch (err) {
+      setSaving(false);
+      const msg = err instanceof Error ? err.message : String(err);
+      setSaveMsg(`❌ ${msg}`);
+      setTimeout(() => setSaveMsg(null), 5000);
     }
   };
 
@@ -397,11 +566,36 @@ export default function ChapterClient() {
   if (teacherMode) {
     return (
       <>
+      {/* ── Unsaved Changes Modal ── */}
+      {showUnsavedModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="bg-white rounded-2xl shadow-xl p-6 max-w-sm w-full space-y-4">
+            <div className="text-center">
+              <span className="text-4xl">⚠️</span>
+              <h3 className="text-lg font-bold text-[#1F3D30] mt-2">Perubahan Belum Disimpan</h3>
+              <p className="text-sm text-[#5C7A6E] mt-1">
+                Kamu masih punya perubahan yang belum disimpan. Yakin ingin meninggalkan halaman ini?
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={dismissNavigation}
+                className="flex-1 px-4 py-2.5 bg-[#1F3D30] text-white rounded-xl text-sm font-semibold hover:bg-[#2A5A44] transition-colors">
+                Batal
+              </button>
+              <button onClick={confirmNavigation}
+                className="flex-1 px-4 py-2.5 bg-red-50 text-red-600 rounded-xl text-sm font-semibold hover:bg-red-100 transition-colors">
+                Tinggalkan Halaman
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="max-w-2xl mx-auto space-y-5 pb-8">
         <div className="flex items-center justify-between">
-          <Link href="/materi" className="inline-flex items-center gap-1.5 text-sm text-[#5C7A6E] hover:text-[#1F3D30]">
-            ← Kembali ke Materi
-          </Link>
+          <button onClick={handleCancelEdit} disabled={cleaningUp}
+            className="inline-flex items-center gap-1.5 text-sm text-[#5C7A6E] hover:text-[#1F3D30]">
+            {cleaningUp ? '⏳ Membersihkan...' : '← Kembali ke Materi'}
+          </button>
         </div>
 
         {/* ── Chapter Metadata ── */}
@@ -410,22 +604,22 @@ export default function ChapterClient() {
           <div className="space-y-3 mt-2">
             <div>
               <label className="text-[10px] font-semibold uppercase text-[#1F3D30]/50">Cover Emoji</label>
-              <input value={editCoverEmoji} onChange={e => setEditCoverEmoji(e.target.value)}
+              <input value={editCoverEmoji} onChange={e => { setEditCoverEmoji(e.target.value); markDirty(); }}
                 className="block w-20 px-2 py-1 text-sm border border-[#1F3D30]/20 rounded-lg bg-white/60 mt-0.5" />
             </div>
             <div>
               <label className="text-[10px] font-semibold uppercase text-[#1F3D30]/50">Judul Bab</label>
-              <input value={editTitle} onChange={e => setEditTitle(e.target.value)}
+              <input value={editTitle} onChange={e => { setEditTitle(e.target.value); markDirty(); }}
                 className="block w-full px-3 py-2 text-lg font-bold border border-[#1F3D30]/20 rounded-lg bg-white/60 mt-0.5" />
             </div>
             <div>
               <label className="text-[10px] font-semibold uppercase text-[#1F3D30]/50">Subtitle</label>
-              <input value={editSubtitle} onChange={e => setEditSubtitle(e.target.value)}
+              <input value={editSubtitle} onChange={e => { setEditSubtitle(e.target.value); markDirty(); }}
                 className="block w-full px-3 py-2 text-sm border border-[#1F3D30]/20 rounded-lg bg-white/60 mt-0.5" />
             </div>
             <div>
               <label className="text-[10px] font-semibold uppercase text-[#1F3D30]/50">Deskripsi</label>
-              <textarea value={editDescription} onChange={e => setEditDescription(e.target.value)} rows={2}
+              <textarea value={editDescription} onChange={e => { setEditDescription(e.target.value); markDirty(); }} rows={2}
                 className="block w-full px-3 py-2 text-sm border border-[#1F3D30]/20 rounded-lg bg-white/60 mt-0.5 resize-none" />
             </div>
             <div>
@@ -441,7 +635,7 @@ export default function ChapterClient() {
                   ['from-amber-100 to-yellow-200', '💛'],
                   ['from-gray-100 to-slate-200', '⚪'],
                 ].map(([color, emoji]) => (
-                  <button key={color} onClick={() => setEditCoverColor(color)}
+                  <button key={color} onClick={() => { setEditCoverColor(color); markDirty(); }}
                     className={`w-8 h-8 rounded-xl flex items-center justify-center text-xs border-2 transition-all ${
                       editCoverColor === color ? 'border-[#1F3D30] scale-110 shadow-sm' : 'border-transparent hover:scale-105'
                     }`}
@@ -498,15 +692,18 @@ export default function ChapterClient() {
                     <input value={mat.content} onChange={e => updateMaterial(i, { content: e.target.value })}
                       className="w-full px-3 py-2 text-sm border border-[#d4dcd0] rounded-lg" placeholder="URL..." />
                     <FileUpload
-                      maxSize={200 * 1024 * 1024}
+                      maxSize={100 * 1024 * 1024}
                       uploadType="teacher"
+                      deferFinalize
                       onUploadSuccess={(result) => {
-                        updateMaterial(i, {
-                          content: result.fileUrl,
-                          fileUrl: result.fileUrl,
-                          fileName: result.fileName,
-                          fileSize: result.fileSize,
-                        });
+                        if (!result.fileId) return;
+                        setPendingFiles(prev => [...prev, {
+                          fileId: result.fileId,
+                          originalName: result.originalName || 'file',
+                          tag: `materi-${i}`,
+                          matIdx: i,
+                        }]);
+                        markDirty();
                       }}
                     />
                     {mat.fileUrl && (
@@ -603,7 +800,7 @@ export default function ChapterClient() {
         <div className="bg-white rounded-2xl border border-[#1F3D30]/5 p-5">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-bold text-[#1F3D30]">🌟 Tugas Pengayaan (Opsional)</h3>
-            <button onClick={() => setEditPengayaanEnabled(!editPengayaanEnabled)}
+            <button onClick={() => { setEditPengayaanEnabled(!editPengayaanEnabled); markDirty(); }}
               className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition-colors ${
                 editPengayaanEnabled ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'
               }`}>
@@ -611,7 +808,7 @@ export default function ChapterClient() {
             </button>
           </div>
           {editPengayaanEnabled && (
-            <textarea value={editPengayaanText} onChange={e => setEditPengayaanText(e.target.value)}
+            <textarea value={editPengayaanText} onChange={e => { setEditPengayaanText(e.target.value); markDirty(); }}
               rows={5} className="w-full px-3 py-2 text-sm border border-[#d4dcd0] rounded-lg resize-none"
               placeholder="### Tugas Pengayaan...&#10;&#10;Tulis instruksi tugas pengayaan di sini (markdown)." />
           )}
@@ -737,7 +934,7 @@ export default function ChapterClient() {
                     </div>
                   ) : (
                     <FileUpload
-                      maxSize={50 * 1024 * 1024}
+                      maxSize={100 * 1024 * 1024}
                       uploadType="student"
                       label="Upload file tugas"
                       onUploadSuccess={async (result) => {
@@ -745,7 +942,7 @@ export default function ChapterClient() {
                         await submitTaskAnswer(
                           chapterId, tIdx, user.uid, displayName,
                           {}, 0, null,
-                          { fileUrl: result.fileUrl, fileName: result.fileName, fileSize: result.fileSize }
+                          { fileUrl: result.fileUrl || '', fileName: result.fileName || '', fileSize: result.fileSize || 0 }
                         );
                         const nextCompleted = { ...completedTasks, [tIdx]: true };
                         setCompletedTasks(nextCompleted);
@@ -926,14 +1123,14 @@ function PengayaanSection({ step, chapterId, postTestOptional, unlocked, user, d
               <div className="flex-1 h-px bg-[#d4dcd0]" />
             </div>
             <FileUpload
-              maxSize={50 * 1024 * 1024}
+              maxSize={100 * 1024 * 1024}
               uploadType="student"
               label="Upload file pengayaan"
               onUploadSuccess={async (result) => {
                 if (!user) return;
                 await submitPengayaanLink(
                   chapterId, user.uid, displayName, '',
-                  { fileUrl: result.fileUrl, fileName: result.fileName, fileSize: result.fileSize }
+                  { fileUrl: result.fileUrl || '', fileName: result.fileName || '', fileSize: result.fileSize || 0 }
                 );
                 setSubmittedLocally(true);
               }}

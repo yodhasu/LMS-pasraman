@@ -3,10 +3,11 @@
 import { useState, useRef, DragEvent } from 'react';
 
 export interface UploadResult {
-  fileUrl: string;
-  fileName: string;
-  fileSize: number;
   fileId: string;
+  fileUrl?: string;
+  fileName?: string;
+  fileSize?: number;
+  originalName?: string; // original filename before renaming
 }
 
 interface Props {
@@ -18,19 +19,23 @@ interface Props {
   disabled?: boolean;
   /** 'student' | 'teacher' — determines which Gdrive folder files land in */
   uploadType?: 'student' | 'teacher';
+  /** When true, skip finalize (permission + rename). File stays private in Drive.
+   *  Use for teacher edit mode where files are finalized on chapter save. */
+  deferFinalize?: boolean;
 }
 
 const DEFAULT_ACCEPT = '.pdf,.jpg,.jpeg,.png,.webp,.gif,.mp4,.webm,.doc,.docx,.ppt,.pptx,.txt,.csv,.zip,.rar';
 const CHUNK_SIZE = 4 * 1024 * 1024; // 4MB per chunk (Vercel Hobby limit)
 
 export default function FileUpload({
-  maxSize = 50 * 1024 * 1024,
+  maxSize = 100 * 1024 * 1024,
   accept = DEFAULT_ACCEPT,
   onUploadSuccess,
   onUploadError,
   label,
   disabled = false,
   uploadType = 'student',
+  deferFinalize = false,
 }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -108,51 +113,38 @@ export default function FileUpload({
         }
       }
 
-      setProgress(80);
-      setPhase('Finalisasi...');
-
-      // Step 3: Determine fileId from last chunk response or query Drive
-      let fileId = lastFileId;
-
-      if (!fileId) {
-        // If we didn't get fileId from chunks, try getting it from the upload session
-        // Google's resumable upload final response includes the file ID
-        setPhase('Mendapatkan informasi file...');
-
-        // Send a GET with upload URL to query status
-        const statusRes = await fetch(uploadUrl, {
-          method: 'PUT',
-          headers: { 'Content-Range': 'bytes */0' },
-        });
-
-        if (statusRes.ok || statusRes.status === 200) {
-          const data = await statusRes.json().catch(() => null);
-          fileId = data?.id || null;
-        }
-      }
-
-      if (!fileId) throw new Error('File ID tidak diketahui setelah upload.');
-
-      // Step 4: Finalize — set permissions & get public URL
-      setPhase('Mengatur akses file...');
-      const finalRes = await fetch('/api/upload/finalize', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fileId }),
-      });
-
-      const finalData = await finalRes.json();
-      if (!finalRes.ok) throw new Error(finalData.message || 'Gagal finalisasi upload.');
-
       setProgress(100);
       setPhase('✅ Selesai!');
 
-      onUploadSuccess({
-        fileUrl: finalData.data.fileUrl,
-        fileName: finalData.data.fileName,
-        fileSize: finalData.data.fileSize,
-        fileId: finalData.data.fileId,
-      });
+      if (!lastFileId) throw new Error('File ID tidak diketahui setelah upload.');
+
+      if (deferFinalize) {
+        // Deferred mode: file stays private in Drive, return fileId + original name
+        onUploadSuccess({ fileId: lastFileId, originalName: file.name });
+      } else {
+        // Immediate finalize: set public permission + get metadata
+        setProgress(80);
+        setPhase('Finalisasi...');
+
+        const finalRes = await fetch('/api/upload/finalize', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fileId: lastFileId }),
+        });
+
+        const finalData = await finalRes.json();
+        if (!finalRes.ok) throw new Error(finalData.message || 'Gagal finalisasi upload.');
+
+        setProgress(100);
+        setPhase('✅ Selesai!');
+
+        onUploadSuccess({
+          fileUrl: finalData.data.fileUrl,
+          fileName: finalData.data.fileName,
+          fileSize: finalData.data.fileSize,
+          fileId: finalData.data.fileId,
+        });
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       setError(message);

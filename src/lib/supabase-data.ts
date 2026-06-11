@@ -773,7 +773,7 @@ export async function saveChapterBatch(
   data: {
     metadata: Record<string, string>;
     pengayaan: { instruction: string | null; enabled: boolean };
-    materials: Array<{ id?: string; section_order: number; type: string; content: string; caption: string | null }>;
+    materials: Array<{ id?: string; section_order: number; type: string; content: string; caption: string | null; fileUrl?: string | null; fileName?: string | null; fileSize?: number | null }>;
     tasks: Array<{
       id?: string; title: string; description: string; due_date: string | null; task_order: number;
       submission_type?: string;

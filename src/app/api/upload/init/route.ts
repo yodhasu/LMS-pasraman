@@ -41,13 +41,13 @@ async function getAccessToken(): Promise<string> {
 
 export async function POST(request: NextRequest) {
   try {
-    const { fileName, mimeType, fileSize, uploadType } = await request.json();
+    const { fileName, mimeType, fileSize, uploadType, tag } = await request.json();
 
     if (!fileName) {
       return NextResponse.json({ ok: false, message: 'Nama file diperlukan.' }, { status: 400 });
     }
 
-    const maxSize = uploadType === 'teacher' ? 200 * 1024 * 1024 : 50 * 1024 * 1024;
+    const maxSize = 100 * 1024 * 1024; // consistent 100MB for all roles
     if (fileSize && fileSize > maxSize) {
       return NextResponse.json(
         { ok: false, message: `Ukuran file terlalu besar (maks ${(maxSize / 1024 / 1024).toFixed(0)}MB).` },
@@ -74,6 +74,7 @@ export async function POST(request: NextRequest) {
     const metadata: Record<string, unknown> = {
       name: fileName,
       mimeType: mimeType || 'application/octet-stream',
+      description: `tag:${tag || 'none'} | original:${fileName} | upload_type:${uploadType || 'student'}`,
     };
     if (folderId) metadata.parents = [folderId];
 
