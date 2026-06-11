@@ -284,26 +284,30 @@ export default function ChapterClient() {
   // ── Mark dirty on any change ──
   const markDirty = () => { if (!isDirty) setIsDirty(true); };
 
-  // ── Cancel edit — cleanup pending files ──
-  const handleCancelEdit = async () => {
-    if (pendingFiles.length === 0) {
-      router.push('/materi');
+  // ── Cancel edit — with unsaved changes check ──
+  const handleCancelEdit = () => {
+    if (isDirty) {
+      setPendingNavigation('/materi');
+      setShowUnsavedModal(true);
       return;
     }
-    setCleaningUp(true);
-    setSaveMsg('Membersihkan file yang belum disimpan...');
-    try {
-      await fetch('/api/upload/cancel', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fileIds: pendingFiles.map(f => f.fileId) }),
-      });
-    } catch {
-      // Non-critical — ignore cleanup errors
+    // No unsaved changes — clean pending files and go
+    handleCleanPendingAndLeave();
+  };
+
+  const handleCleanPendingAndLeave = async () => {
+    if (pendingFiles.length > 0) {
+      setCleaningUp(true);
+      setSaveMsg('Membersihkan file yang belum disimpan...');
+      try {
+        await fetch('/api/upload/cancel', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fileIds: pendingFiles.map(f => f.fileId) }),
+        });
+      } catch { /* Non-critical */ }
+      setCleaningUp(false);
     }
-    setCleaningUp(false);
-    // Also clean up any file URLs that were set on materials from this session
-    // by reloading the chapter data from DB
     router.push('/materi');
   };
 
@@ -339,24 +343,9 @@ export default function ChapterClient() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, [isDirty, teacherMode]);
 
-  const confirmNavigation = async () => {
+  const confirmNavigation = () => {
     setShowUnsavedModal(false);
-    if (pendingFiles.length > 0) {
-      try {
-        await fetch('/api/upload/cancel', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fileIds: pendingFiles.map(f => f.fileId) }),
-        });
-      } catch {
-        // ignored
-      }
-    }
-    setIsDirty(false);
-    setPendingFiles([]);
-    if (pendingNavigation) {
-      router.push(pendingNavigation);
-    }
+    handleCleanPendingAndLeave();
   };
 
   const dismissNavigation = () => {
