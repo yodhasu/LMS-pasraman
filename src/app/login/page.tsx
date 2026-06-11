@@ -12,7 +12,6 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPw, setShowPw] = useState(false);
-  const [role, setRole] = useState<'student' | 'teacher'>('student');
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -54,30 +53,6 @@ export default function LoginPage() {
               {error}
             </div>
           )}
-
-          {/* Role toggle */}
-          <div className="flex bg-[#f0f4ec] rounded-xl p-1 mb-6">
-            <button
-              onClick={() => setRole('student')}
-              className={`flex-1 py-2.5 rounded-lg text-sm font-semibold transition-all ${
-                role === 'student'
-                  ? 'bg-white text-[#1F3D30] shadow-sm'
-                  : 'text-[#5a7d6a]'
-              }`}
-            >
-              🧑‍🎓 Siswa
-            </button>
-            <button
-              onClick={() => setRole('teacher')}
-              className={`flex-1 py-2.5 rounded-lg text-sm font-semibold transition-all ${
-                role === 'teacher'
-                  ? 'bg-white text-[#1F3D30] shadow-sm'
-                  : 'text-[#5a7d6a]'
-              }`}
-            >
-              👨‍🏫 Guru
-            </button>
-          </div>
 
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
