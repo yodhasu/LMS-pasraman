@@ -6,11 +6,14 @@
 -- 1. chapter_tasks — add submission_type
 -- ═══════════════════════════════════════════
 alter table if exists public.chapter_tasks
-  drop constraint if exists chapter_tasks_submission_type_check;
-alter table if exists public.chapter_tasks
-  add column if not exists submission_type text not null default 'mcq'
-  add constraint chapter_tasks_submission_type_check
-    check (submission_type in ('mcq', 'text', 'file'));
+  add column if not exists submission_type text not null default 'mcq';
+
+do $$ begin
+  alter table public.chapter_tasks
+    add constraint chapter_tasks_submission_type_check
+      check (submission_type in ('mcq', 'text', 'file'));
+exception when duplicate_object then null;
+end $$;
 
 -- ═══════════════════════════════════════════
 -- 2. task_submissions — add file fields
@@ -39,16 +42,10 @@ alter table if exists public.chapter_materials
 -- Expand type check to include 'file' type for direct file materials
 alter table if exists public.chapter_materials
   drop constraint if exists chapter_materials_type_check;
+
 alter table if exists public.chapter_materials
   add constraint chapter_materials_type_check
     check (type in ('text', 'image', 'video', 'embed', 'file'));
-
--- ═══════════════════════════════════════════
--- 5. Update RLS for file columns
--- ═══════════════════════════════════════════
--- RLS already allows authenticated users to read/write their own submissions.
--- File columns are covered by existing policies since they're on the same tables.
--- No additional policies needed.
 
 -- Refresh schema cache
 notify pgrst, 'reload schema';
